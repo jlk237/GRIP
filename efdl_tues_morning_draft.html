@@ -1,0 +1,2782 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>EFDL — Eastern Flank Deterrence Lab · Capability Tracker</title>
+<script src="https://unpkg.com/neo4j-driver@5.28.1/lib/browser/neo4j-web.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Barlow:wght@300;400;500;600;700&family=Barlow+Condensed:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#070c17;--bg2:#0b1220;--bg3:#0f1a2e;--panel:#0d1828;--border:#1b3050;
+  --accent:#00c8ff;--accent2:#0077ff;--green:#00e676;--yellow:#ffc400;
+  --red:#ff3d57;--orange:#ff7043;--purple:#b388ff;--cyan:#00bcd4;
+  --text:#cdd9f0;--text2:#7a94bb;--text3:#3d5a80;
+  --mono:'Share Tech Mono',monospace;--sans:'Barlow',sans-serif;--cond:'Barlow Condensed',sans-serif;
+}
+*{margin:0;padding:0;box-sizing:border-box;}
+body{font-family:var(--sans);background:var(--bg);color:var(--text);min-height:100vh;overflow-x:hidden;}
+body::before{content:'';position:fixed;inset:0;background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,200,255,0.012) 2px,rgba(0,200,255,0.012) 4px);pointer-events:none;z-index:9999;}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.3}}
+@keyframes fadeUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+@keyframes mapPulse{0%,100%{transform:scale(1);opacity:0.4}50%{transform:scale(1.4);opacity:0.1}}
+@keyframes countUp{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:translateY(0)}}
+
+/* ── CRED SCREEN ── */
+.cred-screen{position:fixed;inset:0;background:var(--bg);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:9000;}
+.cred-logo{font-family:var(--cond);font-size:56px;font-weight:700;letter-spacing:12px;color:var(--accent);text-shadow:0 0 80px rgba(0,200,255,0.5),0 0 120px rgba(0,200,255,0.2);margin-bottom:6px;}
+.cred-sub{font-family:var(--mono);font-size:11px;color:var(--text3);letter-spacing:3px;margin-bottom:52px;text-align:center;line-height:1.8;}
+.cred-box{background:var(--panel);border:1px solid var(--border);border-radius:6px;padding:36px;width:500px;max-width:95vw;box-shadow:0 24px 80px rgba(0,0,0,0.6);}
+.cred-title{font-family:var(--cond);font-size:13px;font-weight:700;letter-spacing:2px;color:var(--text3);text-transform:uppercase;margin-bottom:22px;display:flex;align-items:center;gap:8px;}
+.cred-title::before{content:'';width:3px;height:13px;background:var(--accent);border-radius:1px;}
+.cred-field{margin-bottom:14px;}
+.cred-label{font-family:var(--mono);font-size:10px;letter-spacing:1.5px;color:var(--text3);text-transform:uppercase;margin-bottom:6px;display:block;}
+.cred-input{width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:3px;color:var(--text);font-family:var(--mono);font-size:13px;padding:10px 14px;outline:none;transition:border-color 0.2s;}
+.cred-input:focus{border-color:var(--accent);box-shadow:0 0 0 2px rgba(0,200,255,0.1);}
+.cred-input::placeholder{color:var(--text3);}
+.cred-btn{width:100%;margin-top:10px;font-family:var(--cond);font-size:14px;font-weight:700;letter-spacing:2px;padding:14px;background:linear-gradient(135deg,rgba(0,200,255,0.15),rgba(0,119,255,0.1));color:var(--accent);border:1px solid rgba(0,200,255,0.4);border-radius:3px;cursor:pointer;text-transform:uppercase;transition:all 0.2s;}
+.cred-btn:hover{background:linear-gradient(135deg,rgba(0,200,255,0.25),rgba(0,119,255,0.2));box-shadow:0 0 24px rgba(0,200,255,0.2);}
+.cred-err{font-family:var(--mono);font-size:11px;color:var(--red);margin-top:10px;text-align:center;display:none;}
+
+/* ── LOADING ── */
+.loading-screen{position:fixed;inset:0;background:var(--bg);display:none;flex-direction:column;align-items:center;justify-content:center;z-index:8999;}
+.loading-logo{font-family:var(--cond);font-size:48px;font-weight:700;color:var(--accent);letter-spacing:8px;text-shadow:0 0 40px rgba(0,200,255,0.6);margin-bottom:8px;}
+.loading-sub{font-family:var(--mono);font-size:11px;color:var(--text3);letter-spacing:2px;margin-bottom:48px;}
+.loading-bar-wrap{width:360px;height:2px;background:var(--border);border-radius:1px;overflow:hidden;margin-bottom:14px;}
+.loading-bar{height:100%;background:var(--accent);width:0%;transition:width 0.5s ease;box-shadow:0 0 10px var(--accent);}
+.loading-msg{font-family:var(--mono);font-size:11px;color:var(--text3);}
+
+/* ── HEADER ── */
+.header{background:linear-gradient(90deg,#040a14 0%,#081323 50%,#040a14 100%);border-bottom:1px solid var(--border);padding:0 28px;height:60px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:200;box-shadow:0 2px 20px rgba(0,0,0,0.5);}
+.header-logo{font-family:var(--cond);font-size:22px;font-weight:700;letter-spacing:5px;color:var(--accent);text-shadow:0 0 20px rgba(0,200,255,0.4);}
+.header-sub{font-family:var(--mono);font-size:9px;color:var(--text3);letter-spacing:1.5px;margin-top:2px;}
+.conn-status{font-family:var(--mono);font-size:11px;padding:4px 12px;border-radius:2px;display:flex;align-items:center;gap:6px;}
+.conn-status.connected{color:var(--green);border:1px solid rgba(0,230,118,0.3);background:rgba(0,230,118,0.05);}
+.conn-status.error{color:var(--red);border:1px solid rgba(255,61,87,0.3);background:rgba(255,61,87,0.05);}
+.dot{width:6px;height:6px;border-radius:50%;background:currentColor;animation:pulse 2s infinite;}
+
+/* ── NAV ── */
+.nav{background:var(--bg2);border-bottom:2px solid var(--border);display:flex;align-items:stretch;position:sticky;top:60px;z-index:199;box-shadow:0 2px 20px rgba(0,0,0,0.4);}
+.nav-btn{font-family:var(--cond);font-size:13px;font-weight:700;letter-spacing:2px;padding:15px 28px;cursor:pointer;white-space:nowrap;color:var(--text3);border:none;background:none;border-bottom:3px solid transparent;margin-bottom:-2px;transition:all 0.2s;text-transform:uppercase;display:flex;align-items:center;gap:8px;}
+.nav-btn:hover{color:var(--text);background:rgba(0,200,255,0.03);}
+.nav-btn.active{color:var(--accent);border-bottom-color:var(--accent);background:rgba(0,200,255,0.06);}
+.nav-right{margin-left:auto;display:flex;align-items:center;padding:0 24px;gap:16px;}
+.nav-badge{font-family:var(--mono);font-size:9px;color:var(--text3);padding:4px 10px;border:1px solid var(--border);border-radius:2px;letter-spacing:1px;}
+
+/* ── NATION BAR ── */
+.nation-bar{background:var(--bg3);border-bottom:1px solid var(--border);padding:9px 28px;display:flex;align-items:center;gap:16px;position:sticky;top:103px;z-index:198;}
+.nation-select{font-family:var(--mono);font-size:12px;background:var(--bg);color:var(--accent);border:1px solid var(--border);border-radius:3px;padding:7px 32px 7px 14px;cursor:pointer;min-width:240px;appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%233d5a80'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 10px center;background-color:var(--bg);}
+.nation-select:focus{outline:none;border-color:var(--accent);}
+.nation-meta{font-family:var(--mono);font-size:11px;color:var(--text3);display:flex;gap:20px;flex-wrap:wrap;}
+.nation-meta strong{color:var(--text2);}
+.filter-label{font-family:var(--mono);font-size:10px;letter-spacing:1.5px;color:var(--text3);text-transform:uppercase;white-space:nowrap;}
+
+/* ── CONTENT ── */
+.content{padding:24px 28px;max-width:1800px;margin:0 auto;display:none;}
+.content.active{display:block;animation:fadeUp 0.3s ease;}
+
+/* ── CARDS ── */
+.card{background:var(--panel);border:1px solid var(--border);border-radius:4px;padding:22px;margin-bottom:18px;}
+.card-title{font-family:var(--cond);font-size:12px;font-weight:700;letter-spacing:2px;color:var(--text3);text-transform:uppercase;margin-bottom:18px;display:flex;align-items:center;gap:8px;}
+.card-title::before{content:'';width:3px;height:13px;background:var(--accent);border-radius:1px;}
+.card-title.red::before{background:var(--red);}
+.card-title.yellow::before{background:var(--yellow);}
+.card-title.green::before{background:var(--green);}
+.card-title.purple::before{background:var(--purple);}
+
+/* ── GRIDS ── */
+.grid-2{display:grid;grid-template-columns:1fr 1fr;gap:18px;}
+.grid-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:18px;}
+.grid-4{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;}
+.grid-5{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;}
+@media(max-width:1200px){.grid-4{grid-template-columns:1fr 1fr}.grid-5{grid-template-columns:repeat(3,1fr)}}
+@media(max-width:800px){.grid-2,.grid-3{grid-template-columns:1fr}}
+
+/* ── STATS ── */
+.stat{background:var(--bg3);border:1px solid var(--border);border-radius:4px;padding:18px;text-align:center;}
+.stat-value{font-family:var(--cond);font-size:34px;font-weight:700;color:var(--accent);line-height:1;margin-bottom:6px;}
+.stat-label{font-family:var(--mono);font-size:9px;color:var(--text3);letter-spacing:1px;text-transform:uppercase;}
+.stat.green .stat-value{color:var(--green);}
+.stat.yellow .stat-value{color:var(--yellow);}
+.stat.red .stat-value{color:var(--red);}
+.stat.orange .stat-value{color:var(--orange);}
+.stat.purple .stat-value{color:var(--purple);}
+
+/* ── BADGES ── */
+.sbadge{font-family:var(--mono);font-size:10px;letter-spacing:1px;padding:3px 10px;border-radius:2px;font-weight:600;white-space:nowrap;}
+.sbadge-deployed{background:rgba(0,230,118,0.12);color:var(--green);border:1px solid rgba(0,230,118,0.3);}
+.sbadge-planned{background:rgba(0,200,255,0.1);color:var(--accent);border:1px solid rgba(0,200,255,0.25);}
+.sbadge-partial{background:rgba(255,196,0,0.1);color:var(--yellow);border:1px solid rgba(255,196,0,0.3);}
+.sbadge-evaluated{background:rgba(255,112,67,0.12);color:var(--orange);border:1px solid rgba(255,112,67,0.3);}
+.sbadge-gap{background:rgba(255,61,87,0.12);color:var(--red);border:1px solid rgba(255,61,87,0.3);}
+.sbadge-unknown{background:rgba(61,90,128,0.2);color:var(--text3);border:1px solid var(--border);}
+
+/* ── TABLE ── */
+table{width:100%;border-collapse:collapse;font-size:12px;}
+th{font-family:var(--cond);font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:var(--text3);padding:9px 12px;border-bottom:1px solid var(--border);text-align:left;background:var(--bg3);}
+td{padding:10px 12px;border-bottom:1px solid rgba(27,48,80,0.4);color:var(--text);vertical-align:middle;}
+tr:hover td{background:rgba(0,200,255,0.03);}
+
+/* ── SECTION DIV ── */
+.section-div{font-family:var(--cond);font-size:17px;font-weight:700;letter-spacing:2px;color:var(--text);text-transform:uppercase;margin-bottom:20px;padding-bottom:10px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;}
+.section-div span{color:var(--accent);}
+
+/* ── INFO GRID ── */
+.info-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:8px;}
+.info-item{background:var(--bg3);border-radius:3px;padding:10px 14px;display:flex;justify-content:space-between;align-items:center;}
+.info-label{font-family:var(--mono);font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:1px;}
+.info-value{font-size:12px;font-weight:600;color:var(--accent);}
+
+/* ── HEATMAP ── */
+.heatmap-wrap{overflow-x:auto;padding-bottom:8px;}
+.heatmap-table{border-collapse:separate;border-spacing:3px;font-size:10px;white-space:nowrap;}
+.heatmap-table th.hm-header{
+  font-family:var(--cond);font-size:11px;font-weight:600;letter-spacing:0.5px;
+  padding:0 4px 8px;background:transparent;color:var(--text2);
+  text-transform:uppercase;border:none;
+  white-space:nowrap;vertical-align:bottom;text-align:left;
+  height:110px;width:36px;
+}
+.hm-header-inner{
+  display:block;
+  transform:rotate(-45deg);
+  transform-origin:left bottom;
+  width:120px;
+  padding-bottom:4px;
+  border-bottom:2px solid currentColor;
+}
+.heatmap-table th.hm-corner{
+  writing-mode:horizontal-tb;transform:none;height:auto;
+  font-family:var(--mono);font-size:9px;color:var(--text3);
+  padding:4px 14px 8px 4px;background:transparent;border:none;
+  vertical-align:bottom;min-width:170px;
+}
+.heatmap-table td.nation-label{
+  font-family:var(--sans);font-size:11px;color:var(--text2);
+  padding:3px 14px 3px 6px;white-space:nowrap;
+  position:sticky;left:0;z-index:2;cursor:pointer;
+  border-radius:2px;transition:color 0.15s;
+  min-width:170px;background:rgba(5,10,20,0.92);
+}
+.heatmap-table td.nation-label:hover{color:var(--accent);}
+.heatmap-table tr.priority-row td.nation-label{color:var(--yellow);}
+.heatmap-cell{width:32px;height:30px;border-radius:4px;cursor:pointer;transition:transform 0.12s,box-shadow 0.12s,filter 0.12s;position:relative;border:none;}
+.heatmap-cell:hover{transform:scale(1.28);box-shadow:0 0 14px currentColor;filter:brightness(1.35);z-index:5;}
+.hm-divider td{height:7px;background:transparent;border:none;padding:0;}
+/* Floating tooltip for heatmap */
+#hm-tooltip{position:fixed;pointer-events:none;background:rgba(9,20,38,0.97);border:1px solid var(--border);border-radius:5px;padding:10px 14px;font-size:12px;color:var(--text);max-width:220px;z-index:9000;display:none;backdrop-filter:blur(10px);box-shadow:0 6px 28px rgba(0,0,0,0.7);}
+
+/* ── MAP CONNECTION LINES ── */
+.map-line-legend{display:flex;gap:16px;flex-wrap:wrap;margin-top:8px;padding:8px 12px;background:var(--bg3);border:1px solid var(--border);border-radius:4px;font-family:var(--mono);font-size:9px;color:var(--text3);}
+.map-line-swatch{display:inline-block;width:24px;height:2px;border-radius:1px;vertical-align:middle;margin-right:5px;}
+.area-row{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid rgba(27,48,80,0.4);}
+.area-row:last-child{border-bottom:none;}
+.area-id{font-family:var(--mono);font-size:10px;color:var(--text3);width:36px;}
+.area-name{font-size:13px;color:var(--text);flex:1;}
+.area-bar-wrap{width:120px;height:5px;background:var(--bg3);border-radius:3px;overflow:hidden;}
+.area-bar{height:100%;border-radius:3px;transition:width 1s ease;}
+.area-score{font-family:var(--mono);font-size:11px;width:32px;text-align:right;}
+.area-count{font-family:var(--mono);font-size:10px;color:var(--text3);width:60px;text-align:right;}
+
+/* ── READINESS BIG ── */
+.readiness-big{font-family:var(--cond);font-size:88px;font-weight:700;line-height:1;text-shadow:0 0 40px currentColor;}
+.readiness-bar-outer{width:100%;height:10px;background:var(--bg3);border-radius:5px;overflow:hidden;border:1px solid var(--border);margin-bottom:16px;}
+.readiness-bar-inner{height:100%;border-radius:5px;transition:width 1.5s cubic-bezier(.16,1,.3,1);}
+
+/* ── RISK ITEMS ── */
+.risk-item{border-left:3px solid var(--red);background:rgba(255,61,87,0.05);padding:12px 14px;margin-bottom:8px;border-radius:0 4px 4px 0;}
+.risk-item.warn{border-left-color:var(--yellow);background:rgba(255,196,0,0.05);}
+.risk-item-title{font-family:var(--cond);font-size:12px;letter-spacing:1px;color:var(--red);margin-bottom:4px;}
+.risk-item.warn .risk-item-title{color:var(--yellow);}
+.risk-item-body{font-size:12px;color:var(--text2);line-height:1.6;}
+
+/* ── TIMELINE ── */
+.timeline-wrap{overflow-x:auto;padding-bottom:8px;}
+.timeline-phase{display:inline-flex;flex-direction:column;min-width:140px;margin-right:3px;vertical-align:top;}
+.phase-header{font-family:var(--mono);font-size:9px;letter-spacing:1px;color:var(--text3);padding:6px 10px;background:var(--bg3);border:1px solid var(--border);border-radius:3px 3px 0 0;text-align:center;}
+.phase-header.active-phase{color:var(--accent);border-color:var(--accent);background:rgba(0,200,255,0.08);}
+.phase-body{padding:8px;background:rgba(11,18,32,0.5);border:1px solid var(--border);border-top:none;border-radius:0 0 3px 3px;min-height:60px;}
+.phase-area{font-size:10px;padding:3px 6px;margin-bottom:3px;border-radius:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+
+/* ── GRAPH ── */
+.graph-canvas{width:100%;height:660px;background:radial-gradient(ellipse at 50% 40%,#0a1828 0%,#050c17 70%,#030810 100%);border-radius:4px;border:1px solid var(--border);position:relative;overflow:hidden;}
+.graph-canvas::before{content:'';position:absolute;inset:0;background:repeating-linear-gradient(0deg,transparent,transparent 40px,rgba(0,200,255,0.015) 40px,rgba(0,200,255,0.015) 41px),repeating-linear-gradient(90deg,transparent,transparent 40px,rgba(0,200,255,0.015) 40px,rgba(0,200,255,0.015) 41px);pointer-events:none;z-index:0;}
+.graph-loading{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:11px;color:var(--text3);letter-spacing:3px;z-index:2;background:radial-gradient(ellipse at 50% 50%,rgba(7,12,23,0.7),rgba(7,12,23,0.95));}
+.graph-tooltip{position:fixed;pointer-events:none;background:rgba(7,14,28,0.97);border:1px solid rgba(0,200,255,0.25);border-radius:5px;padding:12px 16px;font-size:12px;color:var(--text);max-width:280px;z-index:9999;display:none;backdrop-filter:blur(12px);box-shadow:0 6px 32px rgba(0,0,0,0.7);transition:opacity 0.1s;}
+.graph-legend{display:flex;gap:14px;flex-wrap:wrap;margin-bottom:14px;padding:10px 14px;background:var(--bg3);border:1px solid var(--border);border-radius:4px;}
+.legend-item{display:flex;align-items:center;gap:6px;font-family:var(--mono);font-size:10px;color:var(--text3);}
+.legend-dot{width:10px;height:10px;border-radius:50%;}
+
+/* ── GRAPH TOGGLE ── */
+.graph-toggle{display:flex;gap:0;margin-bottom:16px;border:1px solid var(--border);border-radius:3px;overflow:hidden;display:inline-flex;}
+.graph-toggle-btn{font-family:var(--cond);font-size:12px;font-weight:700;letter-spacing:1.5px;padding:9px 22px;cursor:pointer;border:none;background:var(--bg3);color:var(--text3);transition:all 0.2s;text-transform:uppercase;}
+.graph-toggle-btn.active{background:rgba(0,200,255,0.1);color:var(--accent);}
+.graph-toggle-btn:not(:last-child){border-right:1px solid var(--border);}
+
+/* ── FILTER CHIPS ── */
+.filter-row{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;align-items:center;}
+.filter-chip{font-family:var(--mono);font-size:10px;letter-spacing:1px;padding:5px 12px;border-radius:20px;cursor:pointer;border:1px solid var(--border);background:none;color:var(--text3);transition:all 0.15s;text-transform:uppercase;}
+.filter-chip:hover{border-color:var(--text3);color:var(--text);}
+.filter-chip.active{background:rgba(0,200,255,0.1);border-color:var(--accent);color:var(--accent);}
+
+/* ── MAP ── */
+#efdl-map{width:100%;height:500px;border-radius:4px;border:1px solid var(--border);}
+.leaflet-popup-content-wrapper{background:var(--panel)!important;border:1px solid var(--border)!important;border-radius:4px!important;box-shadow:0 4px 24px rgba(0,0,0,0.6)!important;}
+.leaflet-popup-content{color:var(--text)!important;font-family:var(--sans)!important;font-size:12px!important;margin:12px 16px!important;}
+.leaflet-popup-tip{background:var(--panel)!important;}
+.leaflet-popup-close-button{color:var(--text3)!important;}
+.leaflet-control-zoom a{background:var(--panel)!important;color:var(--text)!important;border-color:var(--border)!important;}
+.leaflet-control-zoom a:hover{background:var(--bg3)!important;color:var(--accent)!important;}
+
+/* ── BATTLEGROUP CARDS ── */
+.bg-card{background:var(--bg3);border:1px solid var(--border);border-radius:4px;padding:16px;cursor:pointer;transition:all 0.2s;}
+.bg-card:hover{border-color:var(--accent);background:rgba(0,200,255,0.04);}
+.bg-card.selected{border-color:var(--accent);box-shadow:0 0 16px rgba(0,200,255,0.15);}
+.bg-card-name{font-family:var(--cond);font-size:14px;font-weight:700;letter-spacing:1px;margin-bottom:6px;}
+.bg-card-meta{font-family:var(--mono);font-size:9px;color:var(--text3);margin-bottom:10px;}
+.bg-nation-pill{font-family:var(--mono);font-size:9px;padding:2px 8px;border-radius:10px;display:inline-block;margin:2px;border:1px solid var(--border);color:var(--text3);}
+.bg-nation-pill.host{border-color:var(--accent);color:var(--accent);background:rgba(0,200,255,0.08);}
+.bg-nation-pill.framework{border-color:var(--yellow);color:var(--yellow);background:rgba(255,196,0,0.08);}
+
+/* ── SIMULATIONS ── */
+.sim-control{background:var(--bg3);border:1px solid var(--border);border-radius:4px;padding:20px;}
+.sim-select{font-family:var(--mono);font-size:12px;background:var(--bg);color:var(--accent);border:1px solid var(--border);border-radius:3px;padding:8px 32px 8px 14px;cursor:pointer;width:100%;appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%233d5a80'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 10px center;background-color:var(--bg);}
+.sim-btn{font-family:var(--cond);font-size:13px;font-weight:700;letter-spacing:2px;padding:11px 28px;background:linear-gradient(135deg,rgba(0,200,255,0.15),rgba(0,119,255,0.1));color:var(--accent);border:1px solid rgba(0,200,255,0.4);border-radius:3px;cursor:pointer;transition:all 0.2s;margin-top:12px;}
+.sim-btn:hover{box-shadow:0 0 20px rgba(0,200,255,0.2);}
+.sim-result{background:var(--bg);border:1px solid var(--border);border-radius:4px;padding:20px;min-height:160px;}
+.cascade-item{padding:10px 14px;margin-bottom:6px;border-radius:3px;display:flex;align-items:center;gap:12px;font-size:12px;}
+.cascade-item.critical{background:rgba(255,61,87,0.08);border:1px solid rgba(255,61,87,0.2);}
+.cascade-item.warn{background:rgba(255,196,0,0.06);border:1px solid rgba(255,196,0,0.2);}
+.cascade-item.info{background:rgba(0,200,255,0.05);border:1px solid rgba(0,200,255,0.15);}
+.coalition-item{display:flex;align-items:center;justify-content:space-between;padding:10px 14px;border-bottom:1px solid rgba(27,48,80,0.4);}
+.coalition-item:last-child{border-bottom:none;}
+
+/* ── ANALYST NOTES ── */
+.note-item{padding:14px 16px;border-left:3px solid var(--border);background:rgba(11,18,32,0.6);margin-bottom:8px;border-radius:0 4px 4px 0;}
+.note-item.observation{border-left-color:var(--accent);}
+.note-item.concern{border-left-color:var(--red);}
+.note-item.followup{border-left-color:var(--yellow);}
+.note-item.resolved{border-left-color:var(--green);}
+.note-meta{font-family:var(--mono);font-size:9px;color:var(--text3);margin-bottom:6px;}
+.note-body{font-size:12px;color:var(--text2);line-height:1.7;}
+
+/* ── SCROLLBAR ── */
+::-webkit-scrollbar{width:6px;height:6px;}
+::-webkit-scrollbar-track{background:var(--bg2);}
+::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px;}
+::-webkit-scrollbar-thumb:hover{background:var(--text3);}
+</style>
+</head>
+<body>
+
+<!-- ══ CREDENTIALS ══ -->
+<div class="cred-screen" id="credScreen">
+  <div class="cred-logo">EFDL</div>
+  <div class="cred-sub">EASTERN FLANK DETERRENCE LAB · CAPABILITY TRACKER<br>NATO eFP ANALYSIS PLATFORM · NEO4J AURA</div>
+  <div class="cred-box">
+    <div class="cred-title">Neo4j Aura Connection</div>
+    <div class="cred-field"><label class="cred-label">Aura URI</label><input class="cred-input" id="credUri" type="text" value="neo4j+s://0dc0ce4e.databases.neo4j.io"></div>
+    <div class="cred-field"><label class="cred-label">Username</label><input class="cred-input" id="credUser" type="text" value="0dc0ce4e"></div>
+    <div class="cred-field"><label class="cred-label">Password</label><input class="cred-input" id="credPass" type="password" value="dEQjq39msZdzWTR_QCnprpeMThWpm3XqUDWbBeX86Go"></div>
+    <button class="cred-btn" onclick="connectNeo4j()">▶ CONNECT TO AURA</button>
+    <div class="cred-err" id="credErr"></div>
+  </div>
+</div>
+
+<!-- ══ LOADING ══ -->
+<div class="loading-screen" id="loadingScreen">
+  <div class="loading-logo">EFDL</div>
+  <div class="loading-sub">EASTERN FLANK DETERRENCE LAB</div>
+  <div class="loading-bar-wrap"><div class="loading-bar" id="loadingBar"></div></div>
+  <div class="loading-msg" id="loadingMsg">INITIALIZING...</div>
+</div>
+
+<!-- ══ HEADER ══ -->
+<div class="header" id="mainHeader" style="display:none;">
+  <div><div class="header-logo">⬡ EFDL</div><div class="header-sub">EASTERN FLANK DETERRENCE LAB · CAPABILITY TRACKER // NATO eFP</div></div>
+  <div style="display:flex;align-items:center;gap:12px;">
+    <div class="conn-status connected" id="connStatus"><div class="dot"></div><span>CONNECTED</span></div>
+    <div style="font-family:var(--mono);font-size:10px;color:var(--text3);padding:4px 10px;border:1px solid var(--border);border-radius:2px;" id="headerTs">—</div>
+  </div>
+</div>
+
+<!-- ══ NAV ══ -->
+<div class="nav" id="mainNav" style="display:none;">
+  <button class="nav-btn active" id="nav-overview" onclick="showTab('overview',this)">◫ ALLIANCE OVERVIEW</button>
+  <button class="nav-btn" id="nav-nation"   onclick="showTab('nation',this)">◈ NATION REPORT CARD</button>
+  <button class="nav-btn" id="nav-graph"    onclick="showTab('graph',this)">⬡ GRAPH & DEPENDENCIES</button>
+  <button class="nav-btn" id="nav-bgroups"  onclick="showTab('bgroups',this)">⊕ BATTLEGROUPS & MAP</button>
+  <button class="nav-btn" id="nav-compare"  onclick="showTab('compare',this)">⇆ NATION COMPARISON</button>
+  <button class="nav-btn" id="nav-sim"      onclick="showTab('sim',this)">◆ SIMULATIONS & ANALYSIS</button>
+  <div class="nav-right">
+    <span class="nav-badge">25 NATIONS</span>
+    <span class="nav-badge">51 CAPABILITIES</span>
+    <span class="nav-badge">8 AREAS</span>
+  </div>
+</div>
+
+<!-- ══ NATION BAR (only shows on Nation tab) ══ -->
+<div class="nation-bar" id="nationBar" style="display:none;">
+  <span class="filter-label">◈ ACTIVE NATION:</span>
+  <select class="nation-select" id="nationSelect" onchange="onNationChange()"><option value="">Loading...</option></select>
+  <div class="nation-meta">
+    <span>Priority: <strong id="nm-priority">—</strong></span>
+    <span>eFP Role: <strong id="nm-efp">—</strong></span>
+    <span>Defense GDP%: <strong id="nm-gdp">—</strong></span>
+    <span>2% Compliant: <strong id="nm-2pct">—</strong></span>
+  </div>
+  <button onclick="compareFromNation()" style="margin-left:auto;font-family:var(--cond);font-size:11px;font-weight:700;letter-spacing:1.5px;padding:6px 16px;background:rgba(179,136,255,0.1);color:var(--purple);border:1px solid rgba(179,136,255,0.35);border-radius:3px;cursor:pointer;white-space:nowrap;transition:all 0.2s;" onmouseover="this.style.background='rgba(179,136,255,0.2)'" onmouseout="this.style.background='rgba(179,136,255,0.1)'">⇆ COMPARE →</button>
+</div>
+
+
+<!-- ═══════════════════════════════════════════════
+     TAB 1: ALLIANCE OVERVIEW
+═══════════════════════════════════════════════ -->
+<div class="content active" id="tab-overview">
+  <div class="section-div"><span>Alliance</span> Overview — Eastern Flank Posture</div>
+
+  <!-- KPI Row -->
+  <div class="grid-5" style="margin-bottom:20px;">
+    <div class="stat"><div class="stat-value" id="ov-readiness">—</div><div class="stat-label">Alliance Readiness</div></div>
+    <div class="stat green"><div class="stat-value" id="ov-deployed">—</div><div class="stat-label">Deployed (total)</div></div>
+    <div class="stat red"><div class="stat-value" id="ov-gaps">—</div><div class="stat-label">Critical Gaps</div></div>
+    <div class="stat yellow"><div class="stat-value" id="ov-compliant">—</div><div class="stat-label">2% Compliant</div></div>
+    <div class="stat purple"><div class="stat-value" id="ov-priority">—</div><div class="stat-label">Priority Nations</div></div>
+  </div>
+
+  <div class="grid-2">
+    <!-- Heatmap -->
+    <div class="card" style="grid-column:1/-1;">
+      <div class="card-title">Alliance Capability Heatmap — 25 Nations × 8 Areas</div>
+      <div class="heatmap-wrap" id="heatmap-wrap">
+        <div style="font-family:var(--mono);font-size:11px;color:var(--text3);">Loading heatmap...</div>
+      </div>
+      <div style="margin-top:10px;display:flex;gap:14px;flex-wrap:wrap;align-items:center;">
+        <span style="font-family:var(--mono);font-size:9px;color:var(--text3);">LEGEND:</span>
+        <span style="display:flex;align-items:center;gap:5px;font-family:var(--mono);font-size:9px;color:var(--green);"><span style="width:12px;height:12px;background:rgba(0,230,118,0.7);border-radius:3px;display:inline-block;box-shadow:0 0 6px rgba(0,230,118,0.4);"></span>DEPLOYED</span>
+        <span style="display:flex;align-items:center;gap:5px;font-family:var(--mono);font-size:9px;color:var(--accent);"><span style="width:12px;height:12px;background:rgba(0,200,255,0.6);border-radius:3px;display:inline-block;box-shadow:0 0 6px rgba(0,200,255,0.3);"></span>PLANNED</span>
+        <span style="display:flex;align-items:center;gap:5px;font-family:var(--mono);font-size:9px;color:var(--yellow);"><span style="width:12px;height:12px;background:rgba(255,196,0,0.6);border-radius:3px;display:inline-block;box-shadow:0 0 6px rgba(255,196,0,0.3);"></span>PARTIAL</span>
+        <span style="display:flex;align-items:center;gap:5px;font-family:var(--mono);font-size:9px;color:var(--orange);"><span style="width:12px;height:12px;background:rgba(255,112,67,0.6);border-radius:3px;display:inline-block;box-shadow:0 0 6px rgba(255,112,67,0.3);"></span>EVALUATED</span>
+        <span style="display:flex;align-items:center;gap:5px;font-family:var(--mono);font-size:9px;color:var(--red);"><span style="width:12px;height:12px;background:rgba(255,61,87,0.7);border-radius:3px;display:inline-block;box-shadow:0 0 6px rgba(255,61,87,0.4);"></span>GAP</span>
+        <span style="display:flex;align-items:center;gap:5px;font-family:var(--mono);font-size:9px;color:var(--text3);"><span style="width:12px;height:12px;background:rgba(27,48,80,0.5);border-radius:3px;display:inline-block;"></span>UNKNOWN</span>
+        <span style="margin-left:auto;font-family:var(--mono);font-size:9px;color:var(--text3);">Click nation label → Nation Report · Hover cell for details</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="grid-2">
+    <!-- Area scorecard -->
+    <div class="card">
+      <div class="card-title">Area Readiness Scorecard</div>
+      <div id="area-scorecard"></div>
+    </div>
+    <!-- Critical gaps + Acquisition timeline -->
+    <div>
+      <div class="card">
+        <div class="card-title red">Top Alliance-Wide Gaps</div>
+        <div id="alliance-gaps"></div>
+      </div>
+      <div class="card">
+        <div class="card-title">Acquisition Phase Timeline</div>
+        <div class="timeline-wrap" id="phase-timeline"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+<!-- ═══════════════════════════════════════════════
+     TAB 2: NATION REPORT CARD
+═══════════════════════════════════════════════ -->
+<div class="content" id="tab-nation">
+  <div class="section-div"><span>Nation</span> Report Card</div>
+  <div class="grid-5" style="margin-bottom:18px;">
+    <div class="stat"><div class="stat-value" id="rs-deployed">—</div><div class="stat-label">Deployed</div></div>
+    <div class="stat green"><div class="stat-value" id="rs-planned">—</div><div class="stat-label">Planned</div></div>
+    <div class="stat yellow"><div class="stat-value" id="rs-partial">—</div><div class="stat-label">Partial</div></div>
+    <div class="stat red"><div class="stat-value" id="rs-gaps">—</div><div class="stat-label">Gaps</div></div>
+    <div class="stat orange"><div class="stat-value" id="rs-readiness">—</div><div class="stat-label">Readiness</div></div>
+  </div>
+  <div class="grid-2">
+    <div>
+      <div class="card">
+        <div class="card-title">Readiness Score</div>
+        <div style="text-align:center;padding:16px 0 8px;">
+          <div class="readiness-big" id="readiness-score" style="color:var(--yellow);">—</div>
+          <div style="font-family:var(--mono);font-size:11px;color:var(--text3);letter-spacing:2px;margin:8px 0 18px;" id="readiness-label">LOADING...</div>
+          <div class="readiness-bar-outer"><div class="readiness-bar-inner" id="readiness-bar" style="width:0%;background:linear-gradient(90deg,var(--red),var(--yellow),var(--green));"></div></div>
+        </div>
+        <div id="area-breakdown"></div>
+      </div>
+    </div>
+    <div>
+      <div class="card">
+        <div class="card-title red">Critical Risk Areas</div>
+        <div id="critical-risks"><div style="font-family:var(--mono);font-size:11px;color:var(--text3);">Select a nation...</div></div>
+      </div>
+    </div>
+  </div>
+  <div class="card" style="margin-top:0;">
+    <div class="card-title">Capability Status by Area</div>
+    <div id="capability-table"><div style="font-family:var(--mono);font-size:11px;color:var(--text3);">Loading...</div></div>
+  </div>
+  <div class="card">
+    <div class="card-title">Full Capability Matrix — All 51 Capabilities</div>
+    <div id="full-capability-matrix"><div style="font-family:var(--mono);font-size:11px;color:var(--text3);">Loading...</div></div>
+  </div>
+</div>
+
+
+<!-- ═══════════════════════════════════════════════
+     TAB 3: GRAPH & DEPENDENCIES
+═══════════════════════════════════════════════ -->
+<div class="content" id="tab-graph">
+  <div class="section-div"><span>Graph</span> & Dependency Analysis</div>
+
+  <!-- Mode toggle -->
+  <div style="display:flex;align-items:flex-start;gap:16px;flex-wrap:wrap;margin-bottom:14px;">
+    <div class="graph-toggle">
+      <button class="graph-toggle-btn active" id="gmode-nation" onclick="setGraphMode('nation',this)">⬡ Nations × Capabilities</button>
+      <button class="graph-toggle-btn" id="gmode-dep" onclick="setGraphMode('dep',this)">⇄ Capability Dependencies</button>
+    </div>
+    <div style="font-family:var(--mono);font-size:10px;color:var(--text3);padding:10px 0;">Drag nodes to pin · Scroll to zoom · Click to highlight · Double-click to unpin</div>
+  </div>
+
+  <!-- Nation × Capabilities controls -->
+  <div id="graph-filter-nation-mode">
+    <div style="background:var(--bg3);border:1px solid var(--border);border-radius:4px;padding:14px 16px;margin-bottom:12px;">
+      <div style="display:flex;gap:24px;flex-wrap:wrap;align-items:flex-start;">
+
+        <!-- Nation scope -->
+        <div>
+          <div class="filter-label" style="margin-bottom:8px;">SCOPE TO NATION</div>
+          <div style="display:flex;gap:8px;align-items:center;">
+            <select class="sim-select" id="graph-nation-scope" onchange="applyGraphFilters()" style="min-width:200px;margin-bottom:0;">
+              <option value="ALL">All Nations</option>
+            </select>
+            <button id="graph-neighbor-btn" onclick="toggleNeighborMode(this)" title="Show all nations sharing capabilities with the scoped nation"
+              style="font-family:var(--mono);font-size:9px;letter-spacing:1px;padding:7px 12px;background:rgba(179,136,255,0.08);color:var(--text3);border:1px solid rgba(179,136,255,0.25);border-radius:3px;cursor:pointer;white-space:nowrap;transition:all 0.2s;">
+              ⬡ NEIGHBORS
+            </button>
+          </div>
+        </div>
+
+        <!-- Area multi-select -->
+        <div>
+          <div class="filter-label" style="margin-bottom:8px;">CAPABILITY AREA <span style="color:var(--text3);font-size:9px;">(click to toggle)</span></div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;" id="area-filter-btns">
+            <button class="filter-chip active" data-area="all" onclick="toggleAreaFilter(this)">ALL</button>
+            <button class="filter-chip" data-area="1" onclick="toggleAreaFilter(this)">01 · CMD</button>
+            <button class="filter-chip" data-area="2" onclick="toggleAreaFilter(this)">02 · C-UAS</button>
+            <button class="filter-chip" data-area="3" onclick="toggleAreaFilter(this)">03 · GND AUTO</button>
+            <button class="filter-chip" data-area="4" onclick="toggleAreaFilter(this)">04 · AIR AUTO</button>
+            <button class="filter-chip" data-area="5" onclick="toggleAreaFilter(this)">05 · SUSTAIN</button>
+            <button class="filter-chip" data-area="6" onclick="toggleAreaFilter(this)">06 · SPECTRUM</button>
+            <button class="filter-chip" data-area="7" onclick="toggleAreaFilter(this)">07 · LETHALITY</button>
+            <button class="filter-chip" data-area="8" onclick="toggleAreaFilter(this)">08 · MEDICAL</button>
+          </div>
+        </div>
+
+        <!-- Status multi-select -->
+        <div>
+          <div class="filter-label" style="margin-bottom:8px;">RELATIONSHIP STATUS <span style="color:var(--text3);font-size:9px;">(click to toggle)</span></div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;" id="status-filter-btns">
+            <button class="filter-chip active" data-status="DEPLOYED" onclick="toggleStatusFilter(this)" style="border-color:var(--green);color:var(--green);background:rgba(0,230,118,0.1);">● DEPLOYED</button>
+            <button class="filter-chip active" data-status="PLANNED"  onclick="toggleStatusFilter(this)" style="border-color:var(--accent);color:var(--accent);background:rgba(0,200,255,0.1);">● PLANNED</button>
+            <button class="filter-chip active" data-status="PARTIAL"  onclick="toggleStatusFilter(this)" style="border-color:var(--yellow);color:var(--yellow);background:rgba(255,196,0,0.1);">● PARTIAL</button>
+            <button class="filter-chip active" data-status="EVALUATED" onclick="toggleStatusFilter(this)" style="border-color:var(--orange);color:var(--orange);background:rgba(255,112,67,0.1);">● EVALUATED</button>
+            <button class="filter-chip active" data-status="GAP"      onclick="toggleStatusFilter(this)" style="border-color:var(--red);color:var(--red);background:rgba(255,61,87,0.1);">● GAP</button>
+          </div>
+        </div>
+
+        <!-- Reset filters -->
+        <div style="display:flex;align-items:flex-end;margin-left:auto;">
+          <button id="graph-reset-btn" onclick="resetGraphFilters()" style="display:none;font-family:var(--mono);font-size:10px;letter-spacing:1px;padding:7px 14px;background:rgba(255,196,0,0.08);color:var(--yellow);border:1px solid rgba(255,196,0,0.3);border-radius:3px;cursor:pointer;transition:all 0.2s;" onmouseover="this.style.background='rgba(255,196,0,0.18)'" onmouseout="this.style.background='rgba(255,196,0,0.08)'">↺ RESET FILTERS</button>
+        </div>
+
+      </div>
+    </div>
+  </div>
+  <div id="graph-filter-dep-mode" style="display:none;">
+    <div style="background:var(--bg3);border:1px solid var(--border);border-radius:4px;padding:14px 16px;margin-bottom:12px;">
+      <div class="filter-label" style="margin-bottom:8px;">RELATIONSHIP TYPE</div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;" id="dep-filter-btns">
+        <button class="filter-chip active" data-rel="DEPENDS_ON"     onclick="toggleDepFilter(this)" style="border-color:var(--red);color:var(--red);background:rgba(255,61,87,0.1);">● DEPENDS_ON</button>
+        <button class="filter-chip active" data-rel="ENABLES"        onclick="toggleDepFilter(this)" style="border-color:var(--green);color:var(--green);background:rgba(0,230,118,0.1);">● ENABLES</button>
+        <button class="filter-chip active" data-rel="SHARES_PLATFORM" onclick="toggleDepFilter(this)" style="border-color:var(--purple);color:var(--purple);background:rgba(179,136,255,0.1);">● SHARES_PLATFORM</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="graph-truncation-warn" style="display:none;font-family:var(--mono);font-size:10px;color:var(--yellow);background:rgba(255,196,0,0.08);border:1px solid rgba(255,196,0,0.25);border-radius:3px;padding:6px 12px;margin-bottom:10px;"></div>
+
+  <div class="graph-legend" id="graph-legend">
+    <div class="legend-item"><div class="legend-dot" style="background:#4da6ff;border:2px solid #4da6ff;"></div>Nation</div>
+    <div class="legend-item"><div class="legend-dot" style="background:var(--green);"></div>Deployed</div>
+    <div class="legend-item"><div class="legend-dot" style="background:var(--accent);"></div>Planned</div>
+    <div class="legend-item"><div class="legend-dot" style="background:var(--yellow);"></div>Partial</div>
+    <div class="legend-item"><div class="legend-dot" style="background:var(--orange);"></div>Evaluated</div>
+    <div class="legend-item"><div class="legend-dot" style="background:var(--red);"></div>Gap</div>
+    <div class="legend-item" style="margin-left:auto;"><span style="font-family:var(--mono);font-size:9px;color:var(--text3);">📌 pinned</span></div>
+  </div>
+
+  <div class="graph-canvas" id="graph-canvas">
+    <div class="graph-loading" id="graph-loading">LOADING GRAPH DATA...</div>
+    <div id="graph-density-hint" style="display:none;position:absolute;top:12px;left:50%;transform:translateX(-50%);z-index:10;font-family:var(--mono);font-size:10px;color:var(--yellow);background:rgba(255,196,0,0.08);border:1px solid rgba(255,196,0,0.25);border-radius:3px;padding:6px 14px;pointer-events:none;white-space:nowrap;">
+      ⚠ All-nations view is dense — scope to a nation or filter by area for clarity
+    </div>
+  </div>
+  <div class="graph-tooltip" id="graph-tooltip"></div>
+
+  <div class="grid-2" style="margin-top:18px;">
+    <div class="card" style="grid-column:1/-1;">
+      <div style="display:flex;align-items:center;gap:18px;flex-wrap:wrap;margin-bottom:14px;">
+        <div class="card-title" style="margin:0;">Selected Node</div>
+        <div id="graph-mode-badge" style="font-family:var(--mono);font-size:9px;color:var(--text3);letter-spacing:1px;padding:3px 8px;border:1px solid var(--border);border-radius:2px;">CLICK A NODE TO INSPECT</div>
+        <div id="graph-compare-controls" style="display:none;margin-left:auto;display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+          <span style="font-family:var(--mono);font-size:9px;color:var(--text3);">COMPARE WITH:</span>
+          <select id="graph-compare-nation" class="sim-select" style="min-width:160px;font-size:11px;padding:4px 8px;margin:0;" onchange="highlightSharedCaps()">
+            <option value="">— select nation —</option>
+          </select>
+          <button onclick="clearGraphCompare()" style="font-family:var(--mono);font-size:9px;padding:4px 10px;background:transparent;color:var(--text3);border:1px solid var(--border);border-radius:2px;cursor:pointer;">✕ CLEAR</button>
+        </div>
+      </div>
+      <div class="grid-2">
+        <div id="graph-node-detail" style="font-family:var(--mono);font-size:11px;color:var(--text3);">Click a node to inspect</div>
+        <div id="graph-edge-detail" style="font-family:var(--mono);font-size:11px;color:var(--text3);">Hover an edge to see relationship</div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">Graph Statistics</div>
+      <div id="graph-stats" class="info-grid"></div>
+    </div>
+    <div class="card">
+      <div class="card-title">Interaction Guide</div>
+      <div style="font-family:var(--mono);font-size:10px;color:var(--text3);line-height:2;">
+        <span style="color:var(--accent);">Click node</span> → inspect + highlight neighbors<br>
+        <span style="color:var(--accent);">Hover edge</span> → see relationship label<br>
+        <span style="color:var(--accent);">Drag node</span> → pin in place<br>
+        <span style="color:var(--accent);">Double-click</span> → unpin node<br>
+        <span style="color:var(--accent);">Click nation → Compare</span> → show shared caps with another nation<br>
+        <span style="color:var(--accent);">Scroll</span> → zoom · <span style="color:var(--accent);">Click canvas</span> → deselect
+      </div>
+    </div>
+  </div>
+</div>
+
+
+<!-- ═══════════════════════════════════════════════
+     TAB 4: BATTLEGROUPS & MAP
+═══════════════════════════════════════════════ -->
+<div class="content" id="tab-bgroups">
+  <div class="section-div"><span>Battlegroups</span> & Alliance Map</div>
+
+  <!-- Map layer toggle -->
+  <div class="filter-row" style="margin-bottom:8px;">
+    <span class="filter-label" style="margin-right:4px;">MAP LAYER:</span>
+    <button class="filter-chip active" onclick="setMapLayer('readiness',this)">READINESS</button>
+    <button class="filter-chip" onclick="setMapLayer('gaps',this)">GAPS</button>
+    <button class="filter-chip" onclick="setMapLayer('deployed',this)">DEPLOYED</button>
+    <button class="filter-chip" onclick="setMapLayer('compliance',this)">2% PLEDGE</button>
+  </div>
+  <!-- Connection line toggles -->
+  <div class="filter-row" style="margin-bottom:10px;flex-wrap:wrap;gap:6px;">
+    <span class="filter-label" style="margin-right:4px;">CONNECTIONS:</span>
+    <button class="filter-chip" id="conn-efp-btn" onclick="toggleMapConnections('efp',this)" title="Draw lines between eFP framework nations and their host nations">⇄ eFP LINKS</button>
+    <button class="filter-chip" id="conn-gaps-btn" onclick="toggleMapConnections('gaps',this)" title="Connect nations sharing the most critical gaps">&#10005; SHARED GAPS</button>
+    <button class="filter-chip" id="conn-gdp-btn" onclick="toggleMapConnections('gdp',this)" title="Highlight nations below 2% GDP threshold">$ NON-COMPLIANT</button>
+    <button class="filter-chip" style="margin-left:auto;color:var(--text3);" onclick="clearAllMapConnections()">CLEAR LINES</button>
+  </div>
+  <div id="map-conn-legend" style="display:none;margin-bottom:10px;"></div>
+
+  <div id="efdl-map" style="margin-bottom:18px;"></div>
+
+  <!-- eFP Battlegroup cards -->
+  <div class="card">
+    <div class="card-title purple">eFP Battlegroups — Enhanced Forward Presence</div>
+    <div id="bg-cards-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px;margin-bottom:20px;"></div>
+    <div id="bg-detail-panel" style="display:none;">
+      <div style="border-top:1px solid var(--border);padding-top:16px;">
+        <div id="bg-detail-content"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="grid-3">
+    <div class="stat"><div class="stat-value" id="map-nations">—</div><div class="stat-label">Nations Mapped</div></div>
+    <div class="stat red"><div class="stat-value" id="map-priority">—</div><div class="stat-label">Priority Nations</div></div>
+    <div class="stat green"><div class="stat-value" id="map-compliant">—</div><div class="stat-label">2% Compliant</div></div>
+  </div>
+</div>
+
+
+<!-- ═══════════════════════════════════════════════
+     TAB 5: NATION COMPARISON
+═══════════════════════════════════════════════ -->
+<div class="content" id="tab-compare">
+  <div class="section-div"><span>Nation</span> Comparison — Side by Side</div>
+
+  <!-- Nation pickers -->
+  <div style="display:flex;gap:14px;align-items:flex-end;flex-wrap:wrap;margin-bottom:20px;">
+    <div>
+      <div class="filter-label" style="margin-bottom:7px;">NATION A</div>
+      <select class="nation-select" id="compare-nation-a" onchange="runComparison()" style="min-width:230px;border-color:var(--accent);"></select>
+    </div>
+    <div style="font-family:var(--cond);font-size:22px;font-weight:700;color:var(--text3);padding-bottom:8px;">vs</div>
+    <div>
+      <div class="filter-label" style="margin-bottom:7px;">NATION B</div>
+      <select class="nation-select" id="compare-nation-b" onchange="runComparison()" style="min-width:230px;border-color:var(--purple);"></select>
+    </div>
+    <div>
+      <div class="filter-label" style="margin-bottom:7px;">QUICK PAIR</div>
+      <select class="nation-select" id="compare-quick-pair" onchange="applyQuickPair(this)" style="min-width:200px;">
+        <option value="">— eFP pairs —</option>
+        <option value="GBR|EST">🇬🇧 GBR → 🇪🇪 EST (Battlegroup)</option>
+        <option value="DEU|LTU">🇩🇪 DEU → 🇱🇹 LTU (Battlegroup)</option>
+        <option value="USA|POL">🇺🇸 USA → 🇵🇱 POL (Battlegroup)</option>
+        <option value="FRA|ROU">🇫🇷 FRA → 🇷🇴 ROU (Battlegroup)</option>
+        <option value="EST|LAT">🇪🇪 EST vs 🇱🇻 LAT (Baltic)</option>
+        <option value="POL|FIN">🇵🇱 POL vs 🇫🇮 FIN (Flank)</option>
+      </select>
+    </div>
+  </div>
+
+  <!-- KPI comparison row -->
+  <div id="compare-kpi" style="display:grid;grid-template-columns:1fr auto 1fr;gap:16px;margin-bottom:20px;align-items:center;"></div>
+
+  <!-- Per-area comparison bars -->
+  <div class="card" style="margin-bottom:18px;">
+    <div class="card-title">Readiness by Capability Area</div>
+    <div id="compare-area-bars"></div>
+  </div>
+
+  <!-- Capability diff table -->
+  <div class="card">
+    <div class="card-title">Capability Diff — All 51 Capabilities</div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px;align-items:center;">
+      <span class="filter-label">SHOW:</span>
+      <button class="filter-chip active" data-diff="all"   onclick="toggleDiffFilter(this)">ALL</button>
+      <button class="filter-chip"        data-diff="adiff" onclick="toggleDiffFilter(this)">A BETTER THAN B</button>
+      <button class="filter-chip"        data-diff="bdiff" onclick="toggleDiffFilter(this)">B BETTER THAN A</button>
+      <button class="filter-chip"        data-diff="both_gap" onclick="toggleDiffFilter(this)">BOTH HAVE GAP</button>
+      <button class="filter-chip"        data-diff="both_dep" onclick="toggleDiffFilter(this)">BOTH DEPLOYED</button>
+    </div>
+    <div id="compare-diff-table" style="overflow-x:auto;"></div>
+  </div>
+</div>
+
+
+<!-- ═══════════════════════════════════════════════
+     TAB 6: SIMULATIONS & ANALYSIS
+═══════════════════════════════════════════════ -->
+<div class="content" id="tab-sim">
+  <div class="section-div"><span>Simulations</span> & Analysis</div>
+
+  <div class="grid-2">
+    <!-- Cascade -->
+    <div>
+      <div class="card">
+        <div class="card-title red">◆ Gap Cascade Simulator</div>
+        <div style="font-size:12px;color:var(--text2);line-height:1.7;margin-bottom:16px;">Remove a capability and trace the operational cascade — which downstream capabilities degrade and which nations are affected.</div>
+        <div class="sim-control">
+          <div class="cred-field" style="margin-bottom:10px;">
+            <label class="cred-label">Capability to Remove</label>
+            <select class="sim-select" id="cascade-cap-select"><option value="">Loading...</option></select>
+          </div>
+          <div class="cred-field" style="margin-bottom:0;">
+            <label class="cred-label">Scope</label>
+            <select class="sim-select" id="cascade-nation-select"><option value="ALL">ALL NATIONS</option></select>
+          </div>
+          <button class="sim-btn" onclick="runCascade()">▶ RUN CASCADE</button>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title">Cascade Results</div>
+        <div class="sim-result" id="cascade-result"><div style="font-family:var(--mono);font-size:11px;color:var(--text3);">Configure and run above.</div></div>
+      </div>
+    </div>
+
+    <!-- Coalition -->
+    <div>
+      <div class="card">
+        <div class="card-title green">◈ Procurement Coalition Finder</div>
+        <div style="font-size:12px;color:var(--text2);line-height:1.7;margin-bottom:16px;">Find nations that share a platform family — prime candidates for joint procurement, logistics pooling, or technology transfer.</div>
+        <div class="sim-control">
+          <div class="cred-field" style="margin-bottom:10px;">
+            <label class="cred-label">Platform Family</label>
+            <select class="sim-select" id="coalition-platform-select">
+              <option value="UAS">UAS — Unmanned Aerial Systems</option>
+              <option value="C-UAS">C-UAS — Counter-UAS</option>
+              <option value="C2">C2 — Command & Control</option>
+              <option value="EW">EW — Electronic Warfare</option>
+              <option value="Fires">Fires</option>
+              <option value="UGV">UGV — Unmanned Ground Vehicle</option>
+              <option value="SATCOM">SATCOM</option>
+              <option value="Medical">Medical</option>
+            </select>
+          </div>
+          <div class="cred-field" style="margin-bottom:0;">
+            <label class="cred-label">Minimum Status</label>
+            <select class="sim-select" id="coalition-status-select">
+              <option value="DEPLOYED">Deployed only</option>
+              <option value="PLANNED">Planned or above</option>
+            </select>
+          </div>
+          <button class="sim-btn" onclick="runCoalition()">▶ FIND COALITION</button>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title">Coalition Results</div>
+        <div class="sim-result" id="coalition-result"><div style="font-family:var(--mono);font-size:11px;color:var(--text3);">Configure and run above.</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Alliance scorecard -->
+  <div class="card">
+    <div class="card-title">Alliance Readiness Scorecard — All 8 Areas</div>
+    <div id="alliance-scorecard"><div style="font-family:var(--mono);font-size:11px;color:var(--text3);">Loading...</div></div>
+  </div>
+
+  <!-- Analyst Notes -->
+  <div class="grid-2">
+    <div class="card">
+      <div class="card-title yellow">▧ Analyst Notes & Flags</div>
+      <div style="margin-bottom:12px;">
+        <label class="cred-label">Nation</label>
+        <select class="sim-select" id="note-nation-select" style="margin-bottom:10px;"><option value="">All / General</option></select>
+        <label class="cred-label">Type</label>
+        <select class="sim-select" id="note-type" style="margin-bottom:10px;">
+          <option value="observation">Observation</option>
+          <option value="concern">Concern</option>
+          <option value="followup">Follow-Up Required</option>
+          <option value="resolved">Resolved</option>
+        </select>
+        <label class="cred-label">Note</label>
+        <textarea id="note-text" placeholder="Enter analyst note..." style="width:100%;height:90px;background:var(--bg3);color:var(--text);border:1px solid var(--border);border-radius:3px;padding:10px;font-family:var(--sans);font-size:13px;resize:vertical;outline:none;"></textarea>
+      </div>
+      <button class="sim-btn" style="width:100%;margin-top:0;" onclick="saveNote()">▼ SAVE NOTE</button>
+      <div id="note-status" style="font-family:var(--mono);font-size:10px;margin-top:8px;text-align:center;"></div>
+    </div>
+    <div class="card">
+      <div class="card-title">Notes History</div>
+      <div id="notes-list"><div style="font-family:var(--mono);font-size:11px;color:var(--text3);">No notes yet.</div></div>
+    </div>
+  </div>
+</div>
+
+
+<!-- ══ HEATMAP TOOLTIP ══ -->
+<div id="hm-tooltip"></div>
+
+<!-- ══════════════════════════════════════
+     JAVASCRIPT
+══════════════════════════════════════ -->
+<script>
+// ── GLOBALS ──────────────────────────────────────
+let driver = null;
+let currentNation = 'POL';
+let allNations = [], allCapabilities = [], allAreas = [], allPhases = [];
+let allBattlegroups = [];
+let graphData = { nodes:[], links:[] };
+let depGraphData = { nodes:[], links:[] };
+let graphMode = 'nation';
+let graphAreaFilter = 'all', graphStatusFilter = 'all';
+let leafletMap = null, mapLayer = 'readiness', mapMarkers = {};
+let analystNotes = [];
+
+const AREA_COLORS = {1:'#00c8ff',2:'#ffc400',3:'#ff7043',4:'#b388ff',5:'#00bcd4',6:'#ff80ab',7:'#00e676',8:'#ff3d57'};
+const STATUS_COLORS = {DEPLOYED:'#00e676',PLANNED:'#00c8ff',PARTIAL:'#ffc400',EVALUATED:'#ff7043',GAP:'#ff3d57',UNKNOWN:'#3d5a80',NOT_APPLICABLE:'#2a3d55'};
+
+// Bug 2 fix: single source of truth for BG host mapping, using correct ISO3 codes from loader
+const BG_HOSTS = {
+  'EFP-EST': 'EST',
+  'EFP-LAT': 'LAT',   // Latvia ISO3 is LAT in our DB (not LVA)
+  'EFP-LTU': 'LTU',   // Lithuania ISO3 is LTU
+  'EFP-POL': 'POL',
+  'EFP-BGR': 'BGR',
+  'EFP-HUN': 'HUN',
+  'EFP-ROU': 'ROU',
+  'EFP-SVK': 'SVK',
+};
+
+// ── CONNECTION ────────────────────────────────────
+async function connectNeo4j() {
+  const uri  = document.getElementById('credUri').value.trim();
+  const user = document.getElementById('credUser').value.trim();
+  const pass = document.getElementById('credPass').value;
+  const errEl = document.getElementById('credErr');
+  errEl.style.display = 'none';
+  if (!uri || !pass) { errEl.textContent='URI and password required.'; errEl.style.display='block'; return; }
+  try {
+    driver = neo4j.driver(uri, neo4j.auth.basic(user, pass));
+    await driver.verifyConnectivity();
+  } catch(e) {
+    errEl.textContent = 'Connection failed: ' + e.message;
+    errEl.style.display = 'block';
+    driver = null; return;
+  }
+  document.getElementById('credScreen').style.display = 'none';
+  document.getElementById('loadingScreen').style.display = 'flex';
+  await loadAllData();
+}
+
+async function runQuery(cypher, params={}) {
+  const session = driver.session();
+  try { const r = await session.run(cypher, params); return r.records; }
+  finally { await session.close(); }
+}
+
+function toNum(v) {
+  if (v===null||v===undefined) return null;
+  if (typeof v==='object'&&v.toNumber) return v.toNumber();
+  if (typeof v==='object'&&v.low!==undefined) return v.low;
+  return Number(v);
+}
+
+async function ensureNoteSchema() {
+  try {
+    await runQuery('CREATE CONSTRAINT analyst_note_id IF NOT EXISTS FOR (n:AnalystNote) REQUIRE n.note_id IS UNIQUE');
+  } catch(e) { /* constraint may already exist, safe to ignore */ }
+}
+
+// ── LOAD ALL DATA ─────────────────────────────────
+async function loadAllData() {
+  const steps = [
+    ['LOADING NATIONS...',          loadNations,        15],
+    ['LOADING CAPABILITY AREAS...',  loadAreas,          30],
+    ['LOADING CAPABILITIES...',      loadCapabilities,   50],
+    ['LOADING BATTLEGROUPS...',      loadBattlegroups,   65],
+    ['BUILDING GRAPH DATA...',       loadGraphData,      80],
+    ['LOADING DEPENDENCY GRAPH...',  loadDepGraph,       92],
+    ['ENSURING NOTE SCHEMA...',      ensureNoteSchema,   98],
+    ['FINALIZING...',                async()=>{},        100],
+  ];
+  for (const [m, fn, pct] of steps) {
+    document.getElementById('loadingMsg').textContent = m;
+    document.getElementById('loadingBar').style.width = pct + '%';
+    await fn();
+    await new Promise(r => setTimeout(r,150));
+  }
+  document.getElementById('loadingScreen').style.display = 'none';
+  document.getElementById('mainHeader').style.display = 'flex';
+  document.getElementById('mainNav').style.display = 'flex';
+  document.getElementById('headerTs').textContent = new Date().toUTCString().slice(0,25)+' UTC';
+  await populateSelects();
+  await renderOverviewTab();
+  initMap();
+  initGraph();
+  loadAllianceScorecard();
+  renderBattlegroups();
+}
+
+async function loadNations() {
+  const r = await runQuery('MATCH (n:Nation) RETURN n ORDER BY n.priority_nation DESC, n.name');
+  allNations = r.map(rec => {
+    const p = rec.get('n').properties;
+    return {
+      ...p,
+      nato_joined: toNum(p.nato_joined),
+      gdp_usd_bn: parseFloat(p.gdp_usd_bn)||0,
+      defense_pct_gdp: parseFloat(p.defense_pct_gdp)||0,
+      // Bug 10 fix: Neo4j booleans must be explicitly coerced - raw spread may give neo4j Boolean objects
+      priority_nation: p.priority_nation === true || p.priority_nation?.valueOf?.() === true,
+      two_pct_compliant: p.two_pct_compliant === true || p.two_pct_compliant?.valueOf?.() === true,
+    };
+  });
+}
+async function loadAreas() {
+  const r = await runQuery('MATCH (a:CapabilityArea) RETURN a ORDER BY a.area_id');
+  allAreas = r.map(rec => ({...rec.get('a').properties, area_id:toNum(rec.get('a').properties.area_id)}));
+}
+async function loadCapabilities() {
+  const r = await runQuery('MATCH (c:Capability)-[:BELONGS_TO]->(a:CapabilityArea) RETURN c, a.area_id AS aid, a.color_hex AS color ORDER BY c.cap_id');
+  allCapabilities = r.map(rec => ({...rec.get('c').properties, area_id:toNum(rec.get('aid')), color:rec.get('color')}));
+}
+async function loadBattlegroups() {
+  const r = await runQuery(`
+    MATCH (b:BattlegroupeFP)
+    OPTIONAL MATCH (fw:Nation)-[:FRAMEWORK_NATION_FOR]->(b)
+    OPTIONAL MATCH (host:Nation)-[:HOSTS_BG_NODE]->(b)
+    OPTIONAL MATCH (c:Nation)-[:CONTRIBUTES_TO_BG]->(b)
+    RETURN b, fw.name AS framework, fw.iso3 AS fw_iso3,
+           host.iso3 AS host_iso3,
+           collect(DISTINCT c.iso3) AS contributors
+    ORDER BY b.bg_id
+  `);
+  allBattlegroups = r.map(rec => ({
+    ...rec.get('b').properties,
+    framework: rec.get('framework'),
+    fw_iso3: rec.get('fw_iso3'),
+    host_iso3: rec.get('host_iso3'),   // Bug 3 fix: now properly returned from graph
+    contributors: rec.get('contributors') || []
+  }));
+}
+async function loadGraphData() {
+  const r = await runQuery(`
+    MATCH (n:Nation)-[rel:HAS_STATUS]->(c:Capability)-[:BELONGS_TO]->(a:CapabilityArea)
+    WHERE rel.status IN ['DEPLOYED','PLANNED','PARTIAL','EVALUATED','GAP']
+    RETURN n.iso3 AS iso3, n.name AS nation, n.priority_nation AS priority,
+           c.cap_id AS cap_id, c.name AS cap_name, a.area_id AS area_id,
+           a.color_hex AS color, rel.status AS status
+    LIMIT 2000
+  `);
+  const nMap={}, cMap={}, links=[];
+  r.forEach(rec => {
+    const iso3=rec.get('iso3'), capId=rec.get('cap_id'), status=rec.get('status'), aid=toNum(rec.get('area_id'));
+    if (!nMap[iso3]) nMap[iso3]={id:'n_'+iso3,label:iso3,type:'nation',priority:rec.get('priority'),fullName:rec.get('nation')};
+    if (!cMap[capId]) cMap[capId]={id:'c_'+capId,label:capId,capName:rec.get('cap_name'),type:'capability',area_id:aid,color:rec.get('color')};
+    links.push({source:'n_'+iso3,target:'c_'+capId,status,area_id:aid});
+  });
+  graphData={nodes:[...Object.values(nMap),...Object.values(cMap)],links};
+}
+async function loadDepGraph() {
+  // Bug 8 fix: SHARES_PLATFORM was stored as undirected (a)-[r]-(b) in loader,
+  // so we must query it undirected. We union DEPENDS_ON/ENABLES (directed) with
+  // SHARES_PLATFORM (undirected) to capture all edges correctly.
+  const r = await runQuery(`
+    MATCH (a:Capability)-[r:DEPENDS_ON|ENABLES]->(b:Capability)
+    RETURN a.cap_id AS from_id, a.name AS from_name, a.platform_family AS from_pf,
+           b.cap_id AS to_id, b.name AS to_name, b.platform_family AS to_pf,
+           type(r) AS rel_type
+    UNION
+    MATCH (a:Capability)-[r:SHARES_PLATFORM]-(b:Capability)
+    WHERE a.cap_id < b.cap_id
+    RETURN a.cap_id AS from_id, a.name AS from_name, a.platform_family AS from_pf,
+           b.cap_id AS to_id, b.name AS to_name, b.platform_family AS to_pf,
+           'SHARES_PLATFORM' AS rel_type
+  `);
+  const nMap={}, links=[];
+  r.forEach(rec => {
+    const fid=rec.get('from_id'), tid=rec.get('to_id');
+    const fc=allCapabilities.find(c=>c.cap_id===fid), tc=allCapabilities.find(c=>c.cap_id===tid);
+    if (!nMap[fid]) nMap[fid]={id:'d_'+fid,label:fid,capName:rec.get('from_name'),type:'cap_dep',area_id:fc?.area_id,color:fc?.color||'#3d5a80'};
+    if (!nMap[tid]) nMap[tid]={id:'d_'+tid,label:tid,capName:rec.get('to_name'),type:'cap_dep',area_id:tc?.area_id,color:tc?.color||'#3d5a80'};
+    links.push({source:'d_'+fid,target:'d_'+tid,rel_type:rec.get('rel_type')});
+  });
+  depGraphData={nodes:Object.values(nMap),links};
+}
+
+// ── POPULATE SELECTS ──────────────────────────────
+async function populateSelects() {
+  const ns = document.getElementById('nationSelect');
+  ns.innerHTML = allNations.map(n=>`<option value="${n.iso3}" ${n.iso3===currentNation?'selected':''}>${n.name} (${n.iso3})${n.priority_nation?' ★':''}</option>`).join('');
+
+  const ccs = document.getElementById('cascade-cap-select');
+  ccs.innerHTML = allCapabilities.map(c=>`<option value="${c.cap_id}">${c.cap_id} — ${c.name}</option>`).join('');
+
+  const ccn = document.getElementById('cascade-nation-select');
+  ccn.innerHTML = '<option value="ALL">ALL NATIONS</option>' + allNations.map(n=>`<option value="${n.iso3}">${n.name}</option>`).join('');
+
+  const nns = document.getElementById('note-nation-select');
+  nns.innerHTML = '<option value="">All / General</option>' + allNations.map(n=>`<option value="${n.iso3}">${n.name}</option>`).join('');
+
+  populateGraphNationScope();
+  populateCompareSelects();
+  onNationChange();
+  await loadNotes();
+  runComparison();
+}
+
+// ── NAV & TABS ────────────────────────────────────
+function showTab(id, btn) {
+  document.querySelectorAll('.content').forEach(el=>el.classList.remove('active'));
+  document.querySelectorAll('.nav-btn').forEach(b=>b.classList.remove('active'));
+  document.getElementById('tab-'+id).classList.add('active');
+  btn.classList.add('active');
+  document.getElementById('nationBar').style.display = id==='nation' ? 'flex' : 'none';
+  if (id==='graph') setTimeout(()=>{ renderGraph(); }, 80);  // always re-render; fixes width=0 on first visit
+  if (id==='bgroups') setTimeout(()=>{ if(leafletMap) leafletMap.invalidateSize(); },200);
+  if (id==='compare') { populateCompareSelects(); runComparison(); }
+}
+
+// ── OVERVIEW TAB ──────────────────────────────────
+async function renderOverviewTab() {
+  // KPIs
+  const kpiRecs = await runQuery(`
+    MATCH (n:Nation)-[r:HAS_STATUS]->(c:Capability)
+    WHERE r.readiness_score IS NOT NULL
+    RETURN avg(r.readiness_score) AS avg_score,
+           count(CASE WHEN r.status='DEPLOYED' THEN 1 END) AS deployed,
+           count(CASE WHEN r.status='GAP' THEN 1 END) AS gaps
+  `);
+  if (kpiRecs.length) {
+    const avg = parseFloat(kpiRecs[0].get('avg_score'))||0;
+    document.getElementById('ov-readiness').textContent = Math.round((avg/4)*100)+'%';
+    document.getElementById('ov-deployed').textContent = toNum(kpiRecs[0].get('deployed'));
+    document.getElementById('ov-gaps').textContent = toNum(kpiRecs[0].get('gaps'));
+  }
+  document.getElementById('ov-compliant').textContent = allNations.filter(n=>n.two_pct_compliant).length;
+  document.getElementById('ov-priority').textContent  = allNations.filter(n=>n.priority_nation).length;
+
+  await renderHeatmap();
+  await renderAreaScorecard();
+  await renderAllianceGaps();
+  renderPhaseTimeline();
+}
+
+async function renderHeatmap() {
+  const recs = await runQuery(`
+    MATCH (n:Nation)-[r:HAS_STATUS]->(c:Capability)-[:BELONGS_TO]->(a:CapabilityArea)
+    RETURN n.iso3 AS iso3, n.name AS nname, n.priority_nation AS priority,
+           a.area_id AS area_id, a.name AS area_name, a.color_hex AS color,
+           r.status AS status, r.readiness_score AS score
+    ORDER BY n.priority_nation DESC, n.name, a.area_id
+  `);
+
+  const data = {};
+  recs.forEach(rec => {
+    const iso3=rec.get('iso3'), aid=toNum(rec.get('area_id')), status=rec.get('status'), score=toNum(rec.get('score'));
+    const nname=rec.get('nname'), priority=rec.get('priority');
+    if (!data[iso3]) data[iso3]={name:nname,priority,areas:{}};
+    if (!data[iso3].areas[aid]) data[iso3].areas[aid]={scores:[],statuses:[],areaName:rec.get('area_name'),color:rec.get('color')};
+    data[iso3].areas[aid].scores.push(score!==null?score:0);
+    data[iso3].areas[aid].statuses.push(status||'UNKNOWN');
+  });
+
+  const STATUS_SOLID = {
+    DEPLOYED: 'rgba(0,230,118,0.72)', PLANNED: 'rgba(0,200,255,0.60)',
+    PARTIAL:  'rgba(255,196,0,0.62)', EVALUATED:'rgba(255,112,67,0.60)',
+    GAP:      'rgba(255,61,87,0.68)', UNKNOWN:  'rgba(27,48,80,0.38)'
+  };
+  const STATUS_GLOW = {
+    DEPLOYED:'rgba(0,230,118,0.5)', PLANNED:'rgba(0,200,255,0.4)',
+    PARTIAL:'rgba(255,196,0,0.4)',  EVALUATED:'rgba(255,112,67,0.4)',
+    GAP:'rgba(255,61,87,0.5)',      UNKNOWN:'transparent'
+  };
+  const STATUS_LABEL = {DEPLOYED:'✓ DEPLOYED',PLANNED:'◉ PLANNED',PARTIAL:'◑ PARTIAL',EVALUATED:'◎ EVALUATED',GAP:'✗ GAP',UNKNOWN:'— UNKNOWN'};
+  const dominantStatus = statuses => {
+    for (const s of ['GAP','EVALUATED','PARTIAL','PLANNED','DEPLOYED','UNKNOWN']) if (statuses.includes(s)) return s;
+    return 'UNKNOWN';
+  };
+
+  const sortedNations = Object.entries(data).sort((a,b)=>{
+    if (a[1].priority && !b[1].priority) return -1;
+    if (!a[1].priority && b[1].priority) return 1;
+    return a[1].name.localeCompare(b[1].name);
+  });
+
+  // Build header row — angled readable labels
+  let html = '<table class="heatmap-table"><thead><tr><th class="hm-corner">Nation</th>';
+  allAreas.forEach(a => {
+    html += `<th class="hm-header" style="color:${a.color_hex};"><span class="hm-header-inner" style="border-color:${a.color_hex}88;">${a.name}</span></th>`;
+  });
+  html += '</tr></thead><tbody>';
+
+  let lastPriority = null;
+  sortedNations.forEach(([iso3, nd]) => {
+    // Divider between priority and standard nations
+    if (lastPriority === true && !nd.priority) {
+      html += `<tr class="hm-divider"><td></td>${allAreas.map(()=>'<td></td>').join('')}</tr>`;
+    }
+    lastPriority = nd.priority;
+
+    const rowClass = nd.priority ? 'priority-row' : '';
+    const starEl = nd.priority ? '<span style="color:var(--yellow);margin-right:4px;">★</span>' : '';
+    html += `<tr class="${rowClass}"><td class="nation-label" onclick="heatmapNavToNation('${iso3}')" title="Go to ${nd.name} report">${starEl}<span style="color:var(--text3);font-size:8px;margin-right:5px;">${iso3}</span>${nd.name}</td>`;
+
+    allAreas.forEach(a => {
+      const aData = nd.areas[a.area_id];
+      if (!aData) {
+        html += `<td class="heatmap-cell" style="background:rgba(11,18,32,0.6);" data-tip="${nd.name}|${a.short_name}|—|0|${a.color_hex}"></td>`;
+        return;
+      }
+      const ds = dominantStatus(aData.statuses);
+      const avg = aData.scores.reduce((s,v)=>s+v,0)/aData.scores.length;
+      const pct = Math.round((avg/4)*100);
+      const depCount = aData.statuses.filter(s=>s==='DEPLOYED').length;
+      const gapCount = aData.statuses.filter(s=>s==='GAP').length;
+      const bg = STATUS_SOLID[ds] || STATUS_SOLID.UNKNOWN;
+      const glow = STATUS_GLOW[ds] || 'transparent';
+      const boxShadow = ds !== 'UNKNOWN' ? `inset 0 0 0 1px ${glow},0 0 6px ${glow}` : 'none';
+      html += `<td class="heatmap-cell" style="background:${bg};box-shadow:${boxShadow};" data-tip="${nd.name}|${a.short_name}|${ds}|${pct}|${a.color_hex}|${depCount}|${gapCount}"></td>`;
+    });
+    html += '</tr>';
+  });
+  html += '</tbody></table>';
+  document.getElementById('heatmap-wrap').innerHTML = html;
+
+  // Attach tooltip listeners
+  const tt = document.getElementById('hm-tooltip');
+  document.querySelectorAll('.heatmap-cell').forEach(cell => {
+    cell.addEventListener('mousemove', e => {
+      const [nation, area, status, pct, color, dep, gap] = (cell.dataset.tip||'').split('|');
+      const statusLabel = STATUS_LABEL[status] || '— UNKNOWN';
+      const statusColor = {DEPLOYED:'var(--green)',PLANNED:'var(--accent)',PARTIAL:'var(--yellow)',EVALUATED:'var(--orange)',GAP:'var(--red)',UNKNOWN:'var(--text3)'}[status]||'var(--text3)';
+      tt.innerHTML = `
+        <div style="font-family:var(--cond);font-size:14px;font-weight:700;color:${color||'#fff'};margin-bottom:2px;">${nation||'—'}</div>
+        <div style="font-family:var(--mono);font-size:9px;color:var(--text3);letter-spacing:1px;margin-bottom:8px;">${area||'—'}</div>
+        <div style="font-family:var(--cond);font-size:13px;font-weight:700;color:${statusColor};">${statusLabel}</div>
+        <div style="margin-top:6px;display:flex;gap:12px;font-family:var(--mono);font-size:10px;">
+          <span style="color:var(--text3);">READY <span style="color:${statusColor};">${pct||0}%</span></span>
+          ${dep!==undefined?`<span style="color:var(--green);">${dep}✓</span>`:''}
+          ${gap!==undefined?`<span style="color:var(--red);">${gap}✗</span>`:''}
+        </div>`;
+      tt.style.display='block';
+      const x = e.clientX+14, y = e.clientY-10;
+      tt.style.left = (x+220>window.innerWidth ? e.clientX-234 : x)+'px';
+      tt.style.top  = (y+100>window.innerHeight? e.clientY-110 : y)+'px';
+    });
+    cell.addEventListener('mouseleave', () => { tt.style.display='none'; });
+    // A: Click cell → navigate to nation report
+    cell.addEventListener('click', () => {
+      const nation = (cell.dataset.tip||'').split('|')[0];
+      const n = allNations.find(x=>x.name===nation);
+      if (n) heatmapNavToNation(n.iso3);
+    });
+  });
+}
+
+function heatmapNavToNation(iso3) {
+  // A: Navigate heatmap click to Nation Report Card
+  document.getElementById('nationSelect').value = iso3;
+  onNationChange();
+  showTab('nation', document.getElementById('nav-nation'));
+}
+
+async function renderAreaScorecard() {
+  const recs = await runQuery(`
+    MATCH (n:Nation)-[r:HAS_STATUS]->(c:Capability)-[:BELONGS_TO]->(a:CapabilityArea)
+    WHERE r.readiness_score IS NOT NULL
+    RETURN a.area_id AS aid, a.name AS aname, a.color_hex AS color,
+           avg(r.readiness_score) AS avg,
+           count(CASE WHEN r.status='DEPLOYED' THEN 1 END) AS dep,
+           count(CASE WHEN r.status='GAP' THEN 1 END) AS gaps
+    ORDER BY a.area_id
+  `);
+  document.getElementById('area-scorecard').innerHTML = recs.map(rec => {
+    const aid=toNum(rec.get('aid')), color=rec.get('color'), avg=parseFloat(rec.get('avg'))||0;
+    const dep=toNum(rec.get('dep')), gaps=toNum(rec.get('gaps'));
+    const pct=Math.round((avg/4)*100);
+    const bc=pct>=70?'var(--green)':pct>=40?'var(--yellow)':'var(--red)';
+    return `<div class="area-row">
+      <span class="area-id" style="color:${color};">0${aid}</span>
+      <span class="area-name" style="font-size:12px;">${rec.get('aname')}</span>
+      <div class="area-bar-wrap"><div class="area-bar" style="width:${pct}%;background:${bc};"></div></div>
+      <span class="area-score" style="color:${bc};">${pct}%</span>
+      <span class="area-count"><span style="color:var(--green);">${dep}✓</span> <span style="color:var(--red);">${gaps}✗</span></span>
+    </div>`;
+  }).join('');
+}
+
+async function renderAllianceGaps() {
+  const recs = await runQuery(`
+    MATCH (n:Nation)-[r:HAS_STATUS {status:'GAP'}]->(c:Capability)-[:BELONGS_TO]->(a:CapabilityArea)
+    WHERE n.priority_nation = true
+    RETURN c.cap_id AS cap_id, c.name AS cap_name, a.name AS area, a.color_hex AS color,
+           count(n) AS gap_count
+    ORDER BY gap_count DESC LIMIT 8
+  `);
+  document.getElementById('alliance-gaps').innerHTML = recs.length
+    ? recs.map(rec => `<div class="risk-item" style="margin-bottom:6px;">
+        <div class="risk-item-title">${rec.get('cap_id')} — <span style="color:${rec.get('color')}">${rec.get('area')}</span></div>
+        <div class="risk-item-body" style="display:flex;justify-content:space-between;align-items:center;">
+          <span>${rec.get('cap_name')}</span>
+          <span style="font-family:var(--mono);font-size:10px;color:var(--red);">${toNum(rec.get('gap_count'))} priority nations lacking</span>
+        </div>
+      </div>`).join('')
+    : '<div style="color:var(--green);font-size:12px;">No critical gaps in priority nations.</div>';
+}
+
+async function renderPhaseTimeline() {
+  const recs = await runQuery('MATCH (a:AcquisitionPhase) RETURN a ORDER BY a.phase_id');
+  allPhases = recs.map(rec => ({...rec.get('a').properties, phase_id:toNum(rec.get('a').properties.phase_id)}));
+
+  const now = new Date();
+  let html = '';
+  allPhases.forEach(phase => {
+    const start = new Date(phase.start_date);
+    const end   = new Date(phase.end_date);
+    const isActive = now >= start && now <= end;
+    const areasInPhase = allAreas.filter(a => a.phase_label === phase.label || (phase.phase_id===1 && a.is_ongoing));
+    html += `<div class="timeline-phase">
+      <div class="phase-header ${isActive?'active-phase':''}">${isActive?'● ':''} ${phase.label}</div>
+      <div class="phase-body">
+        ${areasInPhase.map(a=>`<div class="phase-area" style="background:${a.color_hex}22;color:${a.color_hex};border-left:2px solid ${a.color_hex};">${a.short_name}</div>`).join('')}
+        ${!areasInPhase.length?`<div style="font-family:var(--mono);font-size:9px;color:var(--text3);">${phase.status.toUpperCase()}</div>`:''}
+      </div>
+    </div>`;
+  });
+  document.getElementById('phase-timeline').innerHTML = html;
+}
+
+// ── NATION REPORT ─────────────────────────────────
+function onNationChange() {
+  currentNation = document.getElementById('nationSelect').value || 'POL';
+  const n = allNations.find(x=>x.iso3===currentNation);
+  if (n) {
+    document.getElementById('nm-priority').textContent = n.priority_nation?'★ YES':'No';
+    document.getElementById('nm-priority').style.color = n.priority_nation?'var(--yellow)':'var(--text2)';
+    document.getElementById('nm-efp').textContent = (n.efp_role||'—').toUpperCase();
+    document.getElementById('nm-gdp').textContent = (n.defense_pct_gdp||'—')+'%';
+    document.getElementById('nm-2pct').textContent = n.two_pct_compliant?'✓ YES':'✗ NO';
+    document.getElementById('nm-2pct').style.color = n.two_pct_compliant?'var(--green)':'var(--red)';
+  }
+  loadNationReport(currentNation);
+}
+
+async function loadNationReport(iso3) {
+  const recs = await runQuery(`
+    MATCH (n:Nation {iso3:$iso3})-[r:HAS_STATUS]->(c:Capability)-[:BELONGS_TO]->(a:CapabilityArea)
+    RETURN c.cap_id AS cap_id, c.name AS cap_name, c.capability_type AS type, c.platform_family AS platform,
+           c.technology_readiness AS trl, a.area_id AS area_id, a.name AS area_name, a.color_hex AS color,
+           r.status AS status, r.readiness_score AS score, r.deployment_pct AS pct,
+           r.contract_awarded AS contract, r.funding_confirmed AS funding,
+           r.data_confidence AS confidence, r.notes AS notes
+    ORDER BY a.area_id, c.cap_id
+  `, {iso3});
+  const caps = recs.map(rec=>({
+    cap_id:rec.get('cap_id'), cap_name:rec.get('cap_name'), type:rec.get('type'),
+    platform:rec.get('platform'), trl:rec.get('trl'), area_id:toNum(rec.get('area_id')),
+    area_name:rec.get('area_name'), color:rec.get('color'), status:rec.get('status')||'UNKNOWN',
+    score:toNum(rec.get('score')), pct:parseFloat(rec.get('pct'))||0,
+    contract:rec.get('contract'), funding:rec.get('funding'),
+    confidence:rec.get('confidence'), notes:rec.get('notes')
+  }));
+  renderNationReport(caps);
+}
+
+function renderNationReport(caps) {
+  const sc = s => caps.filter(c=>c.status===s).length;
+  const deployed=sc('DEPLOYED'), planned=sc('PLANNED'), partial=sc('PARTIAL'), gaps=sc('GAP')+sc('EVALUATED');
+  const scored=caps.filter(c=>c.score!==null);
+  const avgScore=scored.length?scored.reduce((a,c)=>a+(c.score||0),0)/scored.length:0;
+  const rPct=Math.round((avgScore/4)*100);
+
+  document.getElementById('rs-deployed').textContent=deployed;
+  document.getElementById('rs-planned').textContent=planned;
+  document.getElementById('rs-partial').textContent=partial;
+  document.getElementById('rs-gaps').textContent=gaps;
+  document.getElementById('rs-readiness').textContent=rPct+'%';
+
+  const rEl=document.getElementById('readiness-score');
+  rEl.textContent=rPct+'%';
+  rEl.style.color=rPct>=70?'var(--green)':rPct>=40?'var(--yellow)':'var(--red)';
+  document.getElementById('readiness-label').textContent=rPct>=70?'READY':rPct>=40?'PARTIAL READINESS':'CRITICAL GAPS';
+  setTimeout(()=>{document.getElementById('readiness-bar').style.width=rPct+'%';},100);
+
+  const byArea={};
+  caps.forEach(c=>{ if(!byArea[c.area_id]) byArea[c.area_id]={name:c.area_name,color:c.color,caps:[]}; byArea[c.area_id].caps.push(c); });
+
+  document.getElementById('area-breakdown').innerHTML=Object.entries(byArea).map(([aid,area])=>{
+    const scoredA=area.caps.filter(c=>c.score!==null);
+    const avg=scoredA.length?scoredA.reduce((a,c)=>a+(c.score||0),0)/scoredA.length:0;
+    const pct=(avg/4)*100, dep=area.caps.filter(c=>c.status==='DEPLOYED').length, gap=area.caps.filter(c=>c.status==='GAP'||c.status==='EVALUATED').length;
+    return `<div class="area-row"><span class="area-id" style="color:${area.color}">0${aid}</span><span class="area-name" style="font-size:12px;">${area.name}</span><div class="area-bar-wrap"><div class="area-bar" style="width:${pct}%;background:${area.color};"></div></div><span class="area-score" style="color:${area.color}">${Math.round(pct)}%</span><span class="area-count">${dep}✓ ${gap}✗</span></div>`;
+  }).join('');
+
+  const critCaps=caps.filter(c=>c.status==='GAP'), warnCaps=caps.filter(c=>c.status==='EVALUATED'||c.status==='PARTIAL');
+  let riskHtml='';
+  if(!critCaps.length&&!warnCaps.length) riskHtml='<div style="color:var(--green);font-size:13px;padding:8px;">✓ No critical gaps identified.</div>';
+  else {
+    critCaps.slice(0,5).forEach(c=>{ riskHtml+=`<div class="risk-item"><div class="risk-item-title">🔴 GAP — ${c.cap_id}</div><div class="risk-item-body"><strong>${c.cap_name}</strong><br>${c.platform} · ${c.confidence||'—'} confidence</div></div>`; });
+    warnCaps.slice(0,3).forEach(c=>{ riskHtml+=`<div class="risk-item warn"><div class="risk-item-title">⚠ ${c.status} — ${c.cap_id}</div><div class="risk-item-body"><strong>${c.cap_name}</strong><br>${Math.round((c.pct||0)*100)}% deployed · ${c.contract?'✓ Contracted':'No contract'}</div></div>`; });
+  }
+  document.getElementById('critical-risks').innerHTML=riskHtml;
+
+  document.getElementById('capability-table').innerHTML = (() => {
+    const areaEntries = Object.entries(byArea).sort((a,b)=>+a[0]-+b[0]);
+    const left  = areaEntries.filter(([aid])=>+aid <= 4);
+    const right = areaEntries.filter(([aid])=>+aid >  4);
+    const renderCol = entries => entries.map(([aid,area]) => `
+      <div style="margin-bottom:10px;">
+        <div style="padding:6px 10px;background:${area.color}14;border-left:3px solid ${area.color};font-family:var(--cond);font-size:11px;letter-spacing:1.5px;color:${area.color};margin-bottom:2px;">
+          AREA ${String(+aid).padStart(2,'0')} — ${area.name.toUpperCase()}
+        </div>
+        ${area.caps.map(c=>`
+          <div style="display:flex;align-items:center;gap:8px;padding:5px 10px;border-bottom:1px solid rgba(27,48,80,0.3);">
+            <span style="font-family:var(--mono);font-size:10px;color:var(--text3);width:42px;">${c.cap_id}</span>
+            <span style="flex:1;font-size:11px;color:var(--text2);line-height:1.3;">${c.cap_name}</span>
+            <span class="sbadge sbadge-${(c.status||'unknown').toLowerCase()}">${c.status||'—'}</span>
+            ${c.contract?'<span style="font-family:var(--mono);font-size:9px;color:var(--green);">CTR</span>':''}
+            ${c.funding?'<span style="font-family:var(--mono);font-size:9px;color:var(--accent);">FND</span>':''}
+          </div>`).join('')}
+      </div>`).join('');
+    return `<div style="display:grid;grid-template-columns:1fr 1fr;gap:0 18px;">\
+      <div>${renderCol(left)}</div>\
+      <div>${renderCol(right)}</div>\
+    </div>`;
+  })();
+
+  let matHtml=`<div style="overflow-x:auto;"><table><thead><tr><th>ID</th><th>Capability</th><th>Area</th><th>Platform</th><th>TRL</th><th>Status</th><th>Deploy%</th><th>Contract</th><th>Funding</th><th>Confidence</th></tr></thead><tbody>`;
+  caps.forEach(c=>{ matHtml+=`<tr><td style="font-family:var(--mono);font-size:10px;color:var(--text3);">${c.cap_id}</td><td>${c.cap_name}</td><td style="font-family:var(--mono);font-size:10px;color:${c.color||'#fff'};">A${String(c.area_id).padStart(2,'0')}</td><td style="font-family:var(--mono);font-size:10px;">${c.platform||'—'}</td><td style="font-family:var(--mono);font-size:10px;color:${c.trl==='fielded'?'var(--green)':c.trl==='emerging'?'var(--yellow)':'var(--accent)'};">${(c.trl||'—').toUpperCase()}</td><td><span class="sbadge sbadge-${(c.status||'unknown').toLowerCase()}">${c.status||'—'}</span></td><td style="font-family:var(--mono);font-size:11px;">${Math.round((c.pct||0)*100)}%</td><td style="color:${c.contract?'var(--green)':'var(--text3)'};">${c.contract?'✓':'—'}</td><td style="color:${c.funding?'var(--accent)':'var(--text3)'};">${c.funding?'✓':'—'}</td><td style="font-family:var(--mono);font-size:10px;color:${c.confidence==='high'?'var(--green)':c.confidence==='low'?'var(--red)':'var(--text3)'};">${(c.confidence||'—').toUpperCase()}</td></tr>`; });
+  matHtml+='</tbody></table></div>';
+  document.getElementById('full-capability-matrix').innerHTML=matHtml;
+}
+
+// ── D3 GRAPH ──────────────────────────────────────
+// Filter state — sets of active values
+let activeAreas    = new Set(['all']);   // 'all' means no area filter
+let activeStatuses = new Set(['DEPLOYED','PLANNED','PARTIAL','EVALUATED','GAP']);
+let activeDepRels  = new Set(['DEPENDS_ON','ENABLES','SHARES_PLATFORM']);
+let graphNationScope = 'ALL';
+let currentSimRef = null;
+let graphNeighborMode = false;  // when true: scope + highlight all shared cap neighbors
+
+function initGraph() { /* lazy — rendered on tab switch */ }
+
+function populateGraphNationScope() {
+  const sel = document.getElementById('graph-nation-scope');
+  if (!sel) return;
+  sel.innerHTML = '<option value="ALL">All Nations</option>' +
+    allNations.map(n=>`<option value="${n.iso3}">${n.name} (${n.iso3})</option>`).join('');
+}
+
+function setGraphMode(mode, btn) {
+  graphMode = mode;
+  document.querySelectorAll('.graph-toggle-btn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('graph-filter-nation-mode').style.display = mode==='nation' ? 'block' : 'none';
+  document.getElementById('graph-filter-dep-mode').style.display    = mode==='dep'    ? 'block' : 'none';
+  renderGraph();
+}
+
+function toggleAreaFilter(btn) {
+  const area = btn.dataset.area;
+  if (area === 'all') {
+    // ALL selected — clear individual selections
+    activeAreas = new Set(['all']);
+    document.querySelectorAll('#area-filter-btns .filter-chip').forEach(b => {
+      b.classList.toggle('active', b.dataset.area === 'all');
+    });
+  } else {
+    // Deactivate ALL button
+    activeAreas.delete('all');
+    document.querySelector('#area-filter-btns [data-area="all"]').classList.remove('active');
+    // Toggle this area
+    if (activeAreas.has(area)) {
+      activeAreas.delete(area);
+      btn.classList.remove('active');
+    } else {
+      activeAreas.add(area);
+      btn.classList.add('active');
+    }
+    // If nothing selected, revert to ALL
+    if (activeAreas.size === 0) {
+      activeAreas = new Set(['all']);
+      document.querySelector('#area-filter-btns [data-area="all"]').classList.add('active');
+    }
+  }
+  applyGraphFilters();
+}
+
+function toggleStatusFilter(btn) {
+  const st = btn.dataset.status;
+  if (activeStatuses.has(st)) {
+    // Don't allow deselecting last one
+    if (activeStatuses.size === 1) return;
+    activeStatuses.delete(st);
+    btn.classList.remove('active');
+    btn.style.opacity = '0.35';
+  } else {
+    activeStatuses.add(st);
+    btn.classList.add('active');
+    btn.style.opacity = '1';
+  }
+  applyGraphFilters();
+}
+
+function toggleDepFilter(btn) {
+  const rel = btn.dataset.rel;
+  if (activeDepRels.has(rel)) {
+    if (activeDepRels.size === 1) return;
+    activeDepRels.delete(rel);
+    btn.classList.remove('active');
+    btn.style.opacity = '0.35';
+  } else {
+    activeDepRels.add(rel);
+    btn.classList.add('active');
+    btn.style.opacity = '1';
+  }
+  applyGraphFilters();
+}
+
+function toggleNeighborMode(btn) {
+  graphNeighborMode = !graphNeighborMode;
+  btn.style.background   = graphNeighborMode ? 'rgba(179,136,255,0.22)' : 'rgba(179,136,255,0.08)';
+  btn.style.color        = graphNeighborMode ? 'var(--purple)'           : 'var(--text3)';
+  btn.style.borderColor  = graphNeighborMode ? 'rgba(179,136,255,0.6)'  : 'rgba(179,136,255,0.25)';
+  applyGraphFilters();
+}
+
+function applyGraphFilters() {
+  graphNationScope = document.getElementById('graph-nation-scope')?.value || 'ALL';
+  // B: Show reset button when any filter is non-default
+  const filtersActive = graphNationScope !== 'ALL'
+    || !activeAreas.has('all')
+    || activeStatuses.size < 5
+    || (graphMode === 'dep' && activeDepRels.size < 3);
+  const resetBtn = document.getElementById('graph-reset-btn');
+  if (resetBtn) resetBtn.style.display = filtersActive ? 'block' : 'none';
+  renderGraph();
+}
+
+function resetGraphFilters() {
+  // B: Reset all filters to default state
+  graphNationScope = 'ALL';
+  const scopeSel = document.getElementById('graph-nation-scope');
+  if (scopeSel) scopeSel.value = 'ALL';
+
+  activeAreas = new Set(['all']);
+  document.querySelectorAll('#area-filter-btns .filter-chip').forEach(b => {
+    b.classList.toggle('active', b.dataset.area === 'all');
+  });
+
+  activeStatuses = new Set(['DEPLOYED','PLANNED','PARTIAL','EVALUATED','GAP']);
+  document.querySelectorAll('#status-filter-btns .filter-chip').forEach(b => {
+    b.classList.add('active');
+    b.style.opacity = '1';
+  });
+
+  activeDepRels = new Set(['DEPENDS_ON','ENABLES','SHARES_PLATFORM']);
+  document.querySelectorAll('#dep-filter-btns .filter-chip').forEach(b => {
+    b.classList.add('active');
+    b.style.opacity = '1';
+  });
+
+  graphNeighborMode = false;
+  const neighborBtn = document.getElementById('graph-neighbor-btn');
+  if (neighborBtn) {
+    neighborBtn.style.background  = 'rgba(179,136,255,0.08)';
+    neighborBtn.style.color       = 'var(--text3)';
+    neighborBtn.style.borderColor = 'rgba(179,136,255,0.25)';
+  }
+  document.getElementById('graph-reset-btn').style.display = 'none';
+  renderGraph();
+}
+
+function renderGraph() {
+  const container = document.getElementById('graph-canvas');
+  document.getElementById('graph-loading').style.display = 'flex';
+  // Remove all SVGs and stale no-data messages
+  container.querySelectorAll('svg, div:not(#graph-loading):not(#graph-density-hint)').forEach(e => e.remove());
+  if (currentSimRef) { currentSimRef.stop(); currentSimRef = null; }
+  _currentGraphRefs = null;
+  if (graphMode === 'dep') renderDepGraph(container);
+  else renderNationGraph(container);
+}
+
+function renderNationGraph(container) {
+  let links = graphData.links.filter(l => {
+    const aOk = activeAreas.has('all') || activeAreas.has(String(l.area_id));
+    const sOk = activeStatuses.has(l.status);
+    return aOk && sOk;
+  });
+
+  if (graphNationScope !== 'ALL') {
+    const scopeId = 'n_' + graphNationScope;
+
+    if (graphNeighborMode) {
+      // Neighbor mode: find all caps linked to the scoped nation,
+      // then pull in every nation that shares ANY of those capabilities
+      const scopedCapIds = new Set();
+      graphData.links.forEach(l => {
+        const s = (l.source && l.source.id) ? l.source.id : l.source;
+        const t = (l.target && l.target.id) ? l.target.id : l.target;
+        if (s === scopeId) scopedCapIds.add(t);
+        if (t === scopeId) scopedCapIds.add(s);
+      });
+      const neighborNationIds = new Set([scopeId]);
+      graphData.links.forEach(l => {
+        const s = (l.source && l.source.id) ? l.source.id : l.source;
+        const t = (l.target && l.target.id) ? l.target.id : l.target;
+        if (scopedCapIds.has(t) && s.startsWith('n_')) neighborNationIds.add(s);
+        if (scopedCapIds.has(s) && t.startsWith('n_')) neighborNationIds.add(t);
+      });
+      links = links.filter(l => {
+        const s = (l.source && l.source.id) ? l.source.id : l.source;
+        const t = (l.target && l.target.id) ? l.target.id : l.target;
+        return neighborNationIds.has(s) || neighborNationIds.has(t);
+      });
+    } else {
+      // Standard scope OR compare-pair mode
+      const pairIds = _pendingCompareIds
+        ? new Set(_pendingCompareIds)
+        : new Set([scopeId]);
+      links = links.filter(l => {
+        const s = (l.source && l.source.id) ? l.source.id : l.source;
+        const t = (l.target && l.target.id) ? l.target.id : l.target;
+        return pairIds.has(s) || pairIds.has(t);
+      });
+    }
+  }
+
+
+  const totalLinks = links.length;
+  const truncated = totalLinks > 800;
+  if (truncated) links = links.slice(0, 800);
+
+  // Collect node IDs from string refs (pre-D3-resolution)
+  const activeIds = new Set();
+  links.forEach(l => {
+    activeIds.add((l.source && l.source.id) ? l.source.id : l.source);
+    activeIds.add((l.target && l.target.id) ? l.target.id : l.target);
+  });
+  const nodes = graphData.nodes.filter(n => activeIds.has(n.id));
+  const nodeIdSet = new Set(nodes.map(n => n.id));
+
+  // Re-filter links to only those whose both ends are in nodes
+  const fLinks = links.filter(l => {
+    const s = (l.source && l.source.id) ? l.source.id : l.source;
+    const t = (l.target && l.target.id) ? l.target.id : l.target;
+    return nodeIdSet.has(s) && nodeIdSet.has(t);
+  });
+
+  const warn = document.getElementById('graph-truncation-warn');
+  if (warn) {
+    warn.style.display = truncated ? 'block' : 'none';
+    if (truncated) warn.textContent = '\u26a0 Showing 800 of ' + totalLinks + ' edges \u2014 apply filters to reduce';
+  }
+
+  const hint = document.getElementById('graph-density-hint');
+  if (hint) hint.style.display = (graphNationScope === 'ALL' && nodes.length > 80) ? 'block' : 'none';
+
+  buildSVG(container, nodes, fLinks, 'nation');
+}
+
+function renderDepGraph(container) {
+  const rawLinks = depGraphData.links.filter(l => activeDepRels.has(l.rel_type));
+  const activeIds = new Set();
+  rawLinks.forEach(l => {
+    activeIds.add((l.source && l.source.id) ? l.source.id : l.source);
+    activeIds.add((l.target && l.target.id) ? l.target.id : l.target);
+  });
+  const nodes = depGraphData.nodes.filter(n => activeIds.has(n.id));
+  buildSVG(container, nodes, rawLinks, 'dep');
+}
+
+function buildSVG(container, nodes, links, mode) {
+  const W = container.clientWidth || container.getBoundingClientRect().width
+            || container.closest('.content')?.offsetWidth || 1300;
+  const H = 660;
+
+  if (!nodes.length) {
+    document.getElementById('graph-loading').style.display = 'none';
+    const msg = document.createElement('div');
+    msg.style.cssText = 'position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:12px;color:var(--text3);letter-spacing:2px;pointer-events:none;';
+    msg.textContent = 'NO DATA \u2014 adjust filters';
+    container.appendChild(msg);
+    return;
+  }
+
+  const svg = d3.select(container).append('svg')
+    .attr('width', W).attr('height', H)
+    .style('position', 'absolute').style('inset', '0').style('z-index', '1');
+
+  const defs = svg.append('defs');
+
+  // Glow filters
+  [['g-nation', 5], ['g-cap', 2.5], ['g-dep', 3]].forEach(([id, std]) => {
+    const f = defs.append('filter').attr('id', id)
+      .attr('x', '-60%').attr('y', '-60%').attr('width', '220%').attr('height', '220%');
+    f.append('feGaussianBlur').attr('stdDeviation', std).attr('result', 'blur');
+    const m = f.append('feMerge');
+    m.append('feMergeNode').attr('in', 'blur');
+    m.append('feMergeNode').attr('in', 'SourceGraphic');
+  });
+
+  // Arrow markers for dep graph directed edges
+  if (mode === 'dep') {
+    [['arr-dep', '#ff3d57'], ['arr-ena', '#00e676'], ['arr-plat', '#b388ff']].forEach(([id, col]) => {
+      defs.append('marker').attr('id', id)
+        .attr('viewBox', '0 -4 8 8').attr('refX', 20)
+        .attr('markerWidth', 6).attr('markerHeight', 6).attr('orient', 'auto')
+        .append('path').attr('d', 'M0,-4L8,0L0,4').attr('fill', col).attr('opacity', 0.75);
+    });
+  }
+
+  const g = svg.append('g');
+  const zoom = d3.zoom().scaleExtent([0.03, 10])
+    .on('zoom', e => g.attr('transform', e.transform));
+  svg.call(zoom).on('dblclick.zoom', null);
+
+  const nodeCount = nodes.length;
+  const nNations  = nodes.filter(n => n.type === 'nation').length;
+  const nodeR = d => d.type === 'nation' ? (nNations > 15 ? 11 : 14)
+                   : d.type === 'cap_dep' ? 8 : 5;
+
+  // Force strengths scale with graph density
+  const chargeStr = d => {
+    const base = nodeCount > 100 ? -500 : nodeCount > 50 ? -320 : -200;
+    if (d.type === 'nation')  return base * 1.4;
+    if (d.type === 'cap_dep') return base * 0.45;
+    return base * 0.25;
+  };
+
+  // Link distance: source/target are plain strings here (pre-resolution)
+  const linkDistFn = () => {
+    if (mode === 'dep') return 90;
+    if (graphNationScope !== 'ALL') return 65;
+    return nodeCount > 100 ? 45 : 60;
+  };
+  const baseDistance = linkDistFn();
+
+  const sim = d3.forceSimulation(nodes)
+    .force('link', d3.forceLink(links).id(d => d.id)
+      .distance(l => {
+        // After D3 resolves, source/target are objects
+        const sType = l.source && l.source.type ? l.source.type : '';
+        const tType = l.target && l.target.type ? l.target.type : '';
+        if (sType === 'nation' && tType === 'nation') return baseDistance * 2;
+        return baseDistance;
+      })
+      .strength(0.45))
+    .force('charge', d3.forceManyBody().strength(chargeStr).distanceMax(500))
+    .force('center', d3.forceCenter(W / 2, H / 2).strength(0.06))
+    .force('collision', d3.forceCollide(d => nodeR(d) + (nodeCount > 80 ? 4 : 9)).strength(0.8))
+    .force('x', d3.forceX(W / 2).strength(0.02))
+    .force('y', d3.forceY(H / 2).strength(0.02))
+    .alphaDecay(0.022)
+    .velocityDecay(0.38);
+
+  currentSimRef = sim;
+
+  const linkColor = l => {
+    if (mode === 'dep') {
+      return l.rel_type === 'DEPENDS_ON' ? '#ff3d57'
+           : l.rel_type === 'ENABLES'    ? '#00e676' : '#b388ff';
+    }
+    return STATUS_COLORS[l.status] || '#1b3050';
+  };
+  const linkDash    = l => {
+    if (mode === 'dep') return l.rel_type === 'SHARES_PLATFORM' ? '5,3' : 'none';
+    return l.status === 'GAP' ? '4,3' : l.status === 'PLANNED' ? '2,3' : 'none';
+  };
+  const linkOpacity = l => mode === 'dep' ? 0.6
+    : l.status === 'DEPLOYED' ? 0.55 : l.status === 'GAP' ? 0.4 : 0.22;
+  const linkWidth   = l => mode === 'dep' ? 1.5
+    : l.status === 'DEPLOYED' ? 1.6 : 1.0;
+  const markerEnd   = l => {
+    if (mode !== 'dep' || l.rel_type === 'SHARES_PLATFORM') return null;
+    return l.rel_type === 'DEPENDS_ON' ? 'url(#arr-dep)' : 'url(#arr-ena)';
+  };
+
+  const linkSel = g.append('g').selectAll('line').data(links).join('line')
+    .attr('stroke', linkColor)
+    .attr('stroke-opacity', linkOpacity)
+    .attr('stroke-width', linkWidth)
+    .attr('stroke-dasharray', linkDash)
+    .attr('marker-end', l => markerEnd(l));
+
+  // Nation glow halos
+  g.append('g').selectAll('circle.gr')
+    .data(nodes.filter(n => n.type === 'nation')).join('circle')
+    .attr('class', 'gr').attr('r', d => nodeR(d) + 10)
+    .attr('fill', 'none').attr('stroke', '#4da6ff')
+    .attr('stroke-opacity', 0.07).attr('stroke-width', 14);
+
+  // Pin rings
+  const pinRing = g.append('g').selectAll('circle.pr').data(nodes).join('circle')
+    .attr('class', 'pr').attr('r', d => nodeR(d) + 5)
+    .attr('fill', 'none').attr('stroke', 'var(--yellow)')
+    .attr('stroke-width', 1.5).attr('stroke-opacity', 0)
+    .attr('pointer-events', 'none');
+
+  function updatePinRings() {
+    pinRing.attr('stroke-opacity', d => d._pinned ? 0.75 : 0);
+  }
+
+  const nodeSel = g.append('g').selectAll('circle.nd').data(nodes).join('circle')
+    .attr('class', 'nd')
+    .attr('r', nodeR)
+    .attr('fill', d => d.type === 'nation' ? '#08141f'
+      : (AREA_COLORS[d.area_id] || '#3d5a80') + '22')
+    .attr('stroke', d => d.type === 'nation' ? '#4da6ff'
+      : (AREA_COLORS[d.area_id] || '#3d5a80'))
+    .attr('stroke-width', d => d.type === 'nation' ? 2.5 : 1.2)
+    .attr('filter', d => d.type === 'nation' ? 'url(#g-nation)'
+      : d.type === 'cap_dep' ? 'url(#g-dep)' : 'url(#g-cap)')
+    .attr('cursor', 'pointer')
+    .style('opacity', 0)
+    .call(d3.drag()
+      .on('start', (e, d) => { if (!e.active) sim.alphaTarget(0.3).restart(); d.fx = d.x; d.fy = d.y; })
+      .on('drag',  (e, d) => { d.fx = e.x; d.fy = e.y; })
+      .on('end',   (e, d) => { if (!e.active) sim.alphaTarget(0); d._pinned = true; updatePinRings(); }))
+    .on('dblclick', (e, d) => {
+      e.stopPropagation();
+      d.fx = null; d.fy = null; d._pinned = false;
+      sim.alphaTarget(0.1).restart();
+      setTimeout(() => sim.alphaTarget(0), 800);
+      updatePinRings();
+    })
+    .on('click', (e, d) => { e.stopPropagation(); showNodeDetail(d); highlightNode(d, nodeSel, linkSel, linkOpacity, nodeR); })
+    .on('mouseover', (e, d) => showGraphTooltip(e, d))
+    .on('mousemove', moveGraphTooltip)
+    .on('mouseout', () => { document.getElementById('graph-tooltip').style.display = 'none'; });
+
+  nodeSel.transition().duration(400).delay((_, i) => i * 1.2).style('opacity', 1);
+
+  // Store refs for compare feature
+  _currentGraphRefs = { nodeSel, linkSel, linkOpacity, nodeR };
+
+  // Neighbor mode: visually distinguish focal nation from its neighbors
+  if (mode === 'nation' && graphNeighborMode && graphNationScope !== 'ALL') {
+    const focalId = 'n_' + graphNationScope;
+    nodeSel
+      .attr('stroke', n => {
+        if (n.id === focalId) return 'var(--yellow)';
+        if (n.type === 'nation') return 'var(--purple)';
+        return AREA_COLORS[n.area_id] || '#3d5a80';
+      })
+      .attr('stroke-width', n => n.id === focalId ? 3.5 : (n.type === 'nation' ? 2 : 1.2))
+      .attr('r', n => n.id === focalId ? nodeR(n) + 4 : nodeR(n));
+    const badge = document.getElementById('graph-mode-badge');
+    const nNationCount = nodes.filter(n => n.type === 'nation').length;
+    if (badge) badge.textContent = `⬡ NEIGHBOR MODE — ${nNationCount} nations share capabilities with ${graphNationScope}`;
+  }
+
+  // 2: Edge hover → show relationship label in panel
+  linkSel
+    .on('mouseover', (e, l) => {
+      showEdgeDetail(l);
+      d3.select(e.currentTarget)
+        .attr('stroke-opacity', 0.95)
+        .attr('stroke-width', d => (d.status === 'DEPLOYED' ? 1.6 : 1.0) + 2);
+    })
+    .on('mouseout', (e, l) => {
+      d3.select(e.currentTarget)
+        .attr('stroke-opacity', linkOpacity(l))
+        .attr('stroke-width', linkWidth(l));
+      const el = document.getElementById('graph-edge-detail');
+      if (el) el.innerHTML = '<span style="color:var(--text3);">Hover an edge to see relationship</span>';
+    });
+
+  // Labels: always show nation labels; cap labels only when scoped to one nation
+  const showCapLabels = graphNationScope !== 'ALL';
+  const labelNodes = nodes.filter(n => n.type === 'nation' || (showCapLabels && n.type === 'cap_dep'));
+  const label = g.append('g').selectAll('text').data(labelNodes).join('text')
+    .text(d => d.label)
+    .attr('font-family', 'Share Tech Mono, monospace')
+    .attr('font-size', d => d.type === 'nation' ? (nNations > 15 ? 8 : 9) : 7)
+    .attr('fill', d => d.type === 'nation' ? '#8aacce' : (AREA_COLORS[d.area_id] || '#3d5a80'))
+    .attr('text-anchor', 'middle')
+    .attr('pointer-events', 'none')
+    .attr('dy', d => nodeR(d) + 12);
+
+  // Zoom-to-fit once simulation cools
+  let fitDone = false;
+  function tryFit() {
+    if (fitDone) return;
+    const xs = nodes.map(n => n.x).filter(v => v != null && isFinite(v));
+    const ys = nodes.map(n => n.y).filter(v => v != null && isFinite(v));
+    if (!xs.length) return;
+    fitDone = true;
+    const pad = 40;
+    const x0 = Math.min(...xs) - pad, x1 = Math.max(...xs) + pad;
+    const y0 = Math.min(...ys) - pad, y1 = Math.max(...ys) + pad;
+    const scale = Math.min(0.92, W / (x1 - x0), H / (y1 - y0));
+    const tx = W / 2 - scale * (x0 + x1) / 2;
+    const ty = H / 2 - scale * (y0 + y1) / 2;
+    svg.transition().duration(700)
+      .call(zoom.transform, d3.zoomIdentity.translate(tx, ty).scale(scale));
+    // After re-render triggered by compare, apply the highlight
+    if (_pendingCompareIds) {
+      const [idA, idB] = _pendingCompareIds;
+      _pendingCompareIds = null;
+      // Small delay so refs are settled
+      setTimeout(() => _applyCompareHighlight(idA, idB, null, null), 50);
+    }
+  }
+
+  sim.on('tick', () => {
+    linkSel
+      .attr('x1', d => d.source.x).attr('y1', d => d.source.y)
+      .attr('x2', d => d.target.x).attr('y2', d => d.target.y);
+    g.selectAll('circle.gr').attr('cx', d => d.x).attr('cy', d => d.y);
+    pinRing.attr('cx', d => d.x).attr('cy', d => d.y);
+    nodeSel.attr('cx', d => d.x).attr('cy', d => d.y);
+    label.attr('x', d => d.x).attr('y', d => d.y);
+    if (sim.alpha() < 0.07) tryFit();
+  });
+
+  sim.on('end', tryFit);
+
+  svg.on('click', () => {
+    if (_currentGraphRefs) {
+      clearGraphSelection(_currentGraphRefs.nodeSel, _currentGraphRefs.linkSel, _currentGraphRefs.linkOpacity, _currentGraphRefs.nodeR);
+    }
+  });
+
+  document.getElementById('graph-loading').style.display = 'none';
+
+  const nCaps = nodes.filter(n => n.type === 'capability' || n.type === 'cap_dep').length;
+  document.getElementById('graph-stats').innerHTML = `
+    <div class="info-item"><span class="info-label">Nodes</span><span class="info-value">${nodes.length}</span></div>
+    <div class="info-item"><span class="info-label">Edges</span><span class="info-value">${links.length}</span></div>
+    <div class="info-item"><span class="info-label">${mode === 'dep' ? 'Depends' : 'Nations'}</span>
+      <span class="info-value">${mode === 'dep' ? links.filter(l => l.rel_type === 'DEPENDS_ON').length : nNations}</span></div>
+    <div class="info-item"><span class="info-label">${mode === 'dep' ? 'Enables' : 'Capabilities'}</span>
+      <span class="info-value" style="color:var(--green);">${mode === 'dep' ? links.filter(l => l.rel_type === 'ENABLES').length : nCaps}</span></div>
+    ${mode === 'nation' ? `
+      <div class="info-item"><span class="info-label">Deployed</span>
+        <span class="info-value" style="color:var(--green);">${links.filter(l => l.status === 'DEPLOYED').length}</span></div>
+      <div class="info-item"><span class="info-label">Gaps</span>
+        <span class="info-value" style="color:var(--red);">${links.filter(l => l.status === 'GAP').length}</span></div>
+    ` : `
+      <div class="info-item"><span class="info-label">Shares Platform</span>
+        <span class="info-value" style="color:var(--purple);">${links.filter(l => l.rel_type === 'SHARES_PLATFORM').length}</span></div>
+    `}
+  `;
+}
+
+
+function clearGraphSelection(nodeSel, linkSel, linkOpacity, nodeR) {
+  selectedNodeId = null;
+  graphCompareNationId = null;
+  const cc = document.getElementById('graph-compare-controls');
+  if (cc) cc.style.display = 'none';
+  const badge = document.getElementById('graph-mode-badge');
+  if (badge) badge.textContent = 'CLICK A NODE TO INSPECT';
+  nodeSel
+    .style('opacity', 1)
+    .attr('r', nodeR)
+    .attr('stroke-width', n => n.type === 'nation' ? 2.5 : 1.2)
+    .attr('stroke', n => n.type === 'nation' ? '#4da6ff' : (AREA_COLORS[n.area_id] || '#3d5a80'));
+  linkSel
+    .attr('stroke-opacity', linkOpacity)
+    .attr('stroke-width', l => l.status === 'DEPLOYED' ? 1.6 : 1.0);
+  document.getElementById('graph-node-detail').innerHTML = '<span style="color:var(--text3);">Click a node to inspect</span>';
+  const ed = document.getElementById('graph-edge-detail');
+  if (ed) ed.innerHTML = '<span style="color:var(--text3);">Hover an edge to see relationship</span>';
+}
+
+// ── GRAPH INTERACTION ────────────────────────────
+let selectedNodeId = null;
+let graphCompareNationId = null;
+let _currentGraphRefs = null;
+
+function highlightNode(d, nodeSel, linkSel, linkOpacity, nodeR) {
+  selectedNodeId = d.id;
+  const id = d.id;
+
+  const connectedIds = new Set([id]);
+  linkSel.each(l => {
+    const s = (l.source.id || l.source);
+    const t = (l.target.id || l.target);
+    if (s === id || t === id) { connectedIds.add(s); connectedIds.add(t); }
+  });
+
+  nodeSel
+    .style('opacity', n => connectedIds.has(n.id) ? 1 : 0.08)
+    .attr('r', n => n.id === id ? nodeR(n) + 5 : nodeR(n))
+    .attr('stroke-width', n => n.id === id ? 3.5 : (n.type === 'nation' ? 2.5 : 1.2))
+    .attr('stroke', n => {
+      if (n.id === id) return 'var(--yellow)';
+      if (n.type === 'nation') return '#4da6ff';
+      return AREA_COLORS[n.area_id] || '#3d5a80';
+    });
+
+  linkSel
+    .attr('stroke-opacity', l => {
+      const s = (l.source.id || l.source);
+      const t = (l.target.id || l.target);
+      return (s === id || t === id) ? 0.9 : 0.03;
+    })
+    .attr('stroke-width', l => {
+      const s = (l.source.id || l.source);
+      const t = (l.target.id || l.target);
+      return (s === id || t === id) ? 2.5 : 1.0;
+    });
+
+  const badge = document.getElementById('graph-mode-badge');
+  if (badge) badge.textContent = d.type === 'nation'
+    ? `\u2605 ${d.fullName || d.label} \u2014 ${connectedIds.size - 1} connections`
+    : `\u2b21 ${d.label} \u2014 in ${connectedIds.size - 1} nations`;
+
+  const cc = document.getElementById('graph-compare-controls');
+  if (cc) cc.style.display = (d.type === 'nation') ? 'flex' : 'none';
+  if (d.type === 'nation') populateCompareNationSelect(id);
+}
+
+function clearGraphCompare() {
+  graphCompareNationId = null;
+  const sel = document.getElementById('graph-compare-nation');
+  if (sel) sel.value = '';
+  // Re-run single-node highlight if node still selected
+  if (selectedNodeId && _currentGraphRefs) {
+    const { nodeSel, linkSel, linkOpacity, nodeR } = _currentGraphRefs;
+    const fakeD = { id: selectedNodeId, type: selectedNodeId.startsWith('n_') ? 'nation' : 'cap', fullName: '', label: selectedNodeId };
+    highlightNode(fakeD, nodeSel, linkSel, linkOpacity, nodeR);
+  }
+}
+
+function populateCompareNationSelect(excludeId) {
+  const sel = document.getElementById('graph-compare-nation');
+  if (!sel) return;
+  const iso = excludeId.replace('n_', '');
+  sel.innerHTML = '<option value="">— compare with \u2014</option>' +
+    allNations.filter(n => n.iso3 !== iso)
+      .map(n => `<option value="n_${n.iso3}">${n.name}${n.priority_nation ? ' \u2605' : ''}</option>`)
+      .join('');
+  sel.value = '';
+}
+
+function highlightSharedCaps() {
+  const sel = document.getElementById('graph-compare-nation');
+  graphCompareNationId = sel?.value || null;
+  if (!selectedNodeId || !graphCompareNationId) return;
+
+  const idA = selectedNodeId, idB = graphCompareNationId;
+  const isoA = idA.replace('n_',''), isoB = idB.replace('n_','');
+  const nA = allNations.find(n => n.iso3 === isoA);
+  const nB = allNations.find(n => n.iso3 === isoB);
+
+  // Check if Nation B node exists in current graph
+  const container = document.getElementById('graph-canvas');
+  const svgExists = container.querySelector('svg');
+  const bNodeExists = svgExists && (() => {
+    if (!_currentGraphRefs) return false;
+    let found = false;
+    try { _currentGraphRefs.nodeSel.each(n => { if (n.id === idB) found = true; }); } catch(e) {}
+    return found;
+  })();
+
+  if (!bNodeExists) {
+    // Re-scope the graph to show BOTH nations by pulling links for both
+    const scopeSel = document.getElementById('graph-nation-scope');
+    if (scopeSel) scopeSel.value = isoA;
+    graphNationScope = isoA;
+    graphNeighborMode = false;
+    _pendingCompareIds = [idA, idB];
+    renderGraph();
+    return;
+  }
+
+  _applyCompareHighlight(idA, idB, nA, nB);
+}
+
+let _pendingCompareIds = null;
+
+function _applyCompareHighlight(idA, idB, nA, nB) {
+  if (!_currentGraphRefs) return;
+  const { nodeSel, linkSel, nodeR } = _currentGraphRefs;
+  const isoA = idA.replace('n_',''), isoB = idB.replace('n_','');
+  if (!nA) nA = allNations.find(n => n.iso3 === isoA);
+  if (!nB) nB = allNations.find(n => n.iso3 === isoB);
+
+  const capsA = new Set(), capsB = new Set();
+  linkSel.each(l => {
+    const s = (l.source.id || l.source);
+    const t = (l.target.id || l.target);
+    if (s === idA) capsA.add(t); if (t === idA) capsA.add(s);
+    if (s === idB) capsB.add(t); if (t === idB) capsB.add(s);
+  });
+  const shared = new Set([...capsA].filter(x => capsB.has(x)));
+  const aOnly  = new Set([...capsA].filter(x => !capsB.has(x)));
+  const bOnly  = new Set([...capsB].filter(x => !capsA.has(x)));
+  const allHighlit = new Set([idA, idB, ...shared, ...aOnly, ...bOnly]);
+
+  nodeSel
+    .style('opacity', n => allHighlit.has(n.id) ? 1 : 0.05)
+    .attr('r', n => (n.id === idA || n.id === idB) ? nodeR(n) + 5 : nodeR(n))
+    .attr('stroke-width', n => (n.id === idA || n.id === idB) ? 3.5 : (shared.has(n.id) ? 2.5 : 1.2))
+    .attr('stroke', n => {
+      if (n.id === idA) return 'var(--accent)';
+      if (n.id === idB) return 'var(--purple)';
+      if (shared.has(n.id)) return 'var(--yellow)';
+      if (aOnly.has(n.id))  return 'var(--accent)';
+      if (bOnly.has(n.id))  return 'var(--purple)';
+      return AREA_COLORS[n.area_id] || '#3d5a80';
+    });
+
+  linkSel
+    .attr('stroke-opacity', l => {
+      const s = (l.source.id || l.source);
+      const t = (l.target.id || l.target);
+      if ((s===idA||t===idA) && shared.has(s===idA?t:s)) return 0.9;
+      if ((s===idB||t===idB) && shared.has(s===idB?t:s)) return 0.9;
+      if (s===idA||t===idA||s===idB||t===idB) return 0.4;
+      return 0.02;
+    })
+    .attr('stroke-width', l => {
+      const s = (l.source.id || l.source);
+      const t = (l.target.id || l.target);
+      return (s===idA||t===idA||s===idB||t===idB) ? 2 : 1;
+    });
+
+  const badge = document.getElementById('graph-mode-badge');
+  if (badge) badge.textContent = `\u26a1 ${nA?.iso3||isoA} vs ${nB?.iso3||isoB} \u2014 ${shared.size} shared \u00b7 ${aOnly.size} A-only \u00b7 ${bOnly.size} B-only`;
+
+  document.getElementById('graph-node-detail').innerHTML = `
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap;">
+      <span style="font-family:var(--cond);font-size:17px;font-weight:700;color:var(--accent);">${nA?.name||isoA}</span>
+      <span style="color:var(--text3);font-family:var(--mono);font-size:10px;">vs</span>
+      <span style="font-family:var(--cond);font-size:17px;font-weight:700;color:var(--purple);">${nB?.name||isoB}</span>
+    </div>
+    <div style="display:flex;gap:18px;font-family:var(--mono);font-size:11px;flex-wrap:wrap;margin-bottom:8px;">
+      <span style="color:var(--yellow);">\u2b21 ${shared.size} shared</span>
+      <span style="color:var(--accent);">${aOnly.size} ${nA?.iso3||isoA}-only</span>
+      <span style="color:var(--purple);">${bOnly.size} ${nB?.iso3||isoB}-only</span>
+    </div>
+    <div style="font-size:10px;color:var(--text3);">
+      <span style="color:var(--yellow);">\u25a0</span> shared &nbsp;
+      <span style="color:var(--accent);">\u25a0</span> ${nA?.iso3||isoA} only &nbsp;
+      <span style="color:var(--purple);">\u25a0</span> ${nB?.iso3||isoB} only
+    </div>
+  `;
+}
+
+
+function showNodeDetail(d) {
+  const el = document.getElementById('graph-node-detail');
+  if (d.type === 'nation') {
+    const n = allNations.find(x => x.iso3 === d.id.replace('n_', ''));
+    if (!n) { el.innerHTML = '<span style="color:var(--text3);">Nation not found</span>'; return; }
+    el.innerHTML = `
+      <div style="display:flex;align-items:baseline;gap:10px;margin-bottom:10px;">
+        <span style="font-family:var(--cond);font-size:18px;font-weight:700;color:#4da6ff;">${n.name}</span>
+        ${n.priority_nation ? '<span style="color:var(--yellow);font-size:11px;">&#9733; PRIORITY</span>' : ''}
+      </div>
+      <div class="info-grid">
+        <div class="info-item"><span class="info-label">eFP Role</span><span class="info-value">${(n.efp_role||'—').toUpperCase()}</span></div>
+        <div class="info-item"><span class="info-label">NATO</span><span class="info-value">${n.nato_joined}</span></div>
+        <div class="info-item"><span class="info-label">Defense %GDP</span><span class="info-value">${n.defense_pct_gdp}%</span></div>
+        <div class="info-item"><span class="info-label">2% Pledge</span><span class="info-value" style="color:${n.two_pct_compliant?'var(--green)':'var(--red)'};">${n.two_pct_compliant?'&#10003; MET':'&#10007; NO'}</span></div>
+      </div>
+      <button onclick="heatmapNavToNation('${n.iso3}')" style="margin-top:10px;font-family:var(--mono);font-size:9px;letter-spacing:1px;padding:5px 12px;background:rgba(0,200,255,0.08);color:var(--accent);border:1px solid rgba(0,200,255,0.25);border-radius:2px;cursor:pointer;">&rarr; NATION REPORT</button>
+    `;
+  } else {
+    const capId = d.label;
+    const c = allCapabilities.find(x => x.cap_id === capId);
+    const color = AREA_COLORS[d.area_id] || '#fff';
+    el.innerHTML = c ? `
+      <div style="font-family:var(--cond);font-size:15px;font-weight:700;color:${color};margin-bottom:8px;">${c.cap_id} &#8212; ${c.name}</div>
+      <div class="info-grid">
+        <div class="info-item"><span class="info-label">Platform</span><span class="info-value">${c.platform_family||'&#8212;'}</span></div>
+        <div class="info-item"><span class="info-label">Type</span><span class="info-value">${c.capability_type||'&#8212;'}</span></div>
+        <div class="info-item"><span class="info-label">TRL</span><span class="info-value">${(c.technology_readiness||'&#8212;').toUpperCase()}</span></div>
+        <div class="info-item"><span class="info-label">Dual Use</span><span class="info-value">${c.dual_use?'YES':'NO'}</span></div>
+      </div>` : '<span style="color:var(--text3);">Capability not found</span>';
+  }
+}
+
+function showEdgeDetail(l) {
+  const el = document.getElementById('graph-edge-detail');
+  if (!el) return;
+  const sId = (l.source.id || l.source).replace('n_','');
+  const tId = (l.target.id || l.target).replace('n_','');
+  if (l.rel_type) {
+    const relColors = { DEPENDS_ON:'var(--red)', ENABLES:'var(--green)', SHARES_PLATFORM:'var(--purple)' };
+    const color = relColors[l.rel_type] || 'var(--text)';
+    const sName = allCapabilities.find(c=>c.cap_id===sId)?.name || sId;
+    const tName = allCapabilities.find(c=>c.cap_id===tId)?.name || tId;
+    el.innerHTML = `
+      <div style="font-family:var(--cond);font-size:13px;font-weight:700;color:${color};margin-bottom:6px;">${l.rel_type.replace(/_/g,' ')}</div>
+      <div style="font-size:11px;color:var(--text2);">${sName} <span style="color:${color};">&#8594;</span> ${tName}</div>`;
+  } else {
+    const statusColors = {DEPLOYED:'var(--green)',PLANNED:'var(--accent)',PARTIAL:'var(--yellow)',EVALUATED:'var(--orange)',GAP:'var(--red)'};
+    const color = statusColors[l.status] || 'var(--text3)';
+    const nName = allNations.find(n=>n.iso3===sId)?.name || allNations.find(n=>n.iso3===tId)?.name || sId;
+    const capId = allCapabilities.find(c=>c.cap_id===tId)?.cap_id || allCapabilities.find(c=>c.cap_id===sId)?.cap_id || tId;
+    const cName = allCapabilities.find(c=>c.cap_id===capId)?.name || '';
+    el.innerHTML = `
+      <div style="font-family:var(--cond);font-size:13px;font-weight:700;color:${color};margin-bottom:4px;">HAS_STATUS &#8594; ${l.status}</div>
+      <div style="font-size:11px;color:var(--text2);margin-bottom:2px;"><span style="color:var(--accent);">${nName}</span> &#8594; <span style="color:${AREA_COLORS[l.area_id]||'#fff'};">${capId}</span></div>
+      <div style="font-size:10px;color:var(--text3);">${cName}</div>`;
+  }
+}
+
+function showGraphTooltip(e, d) {
+  const tt = document.getElementById('graph-tooltip');
+  tt.style.display = 'block';
+  if (d.type === 'nation') {
+    const n = allNations.find(x => x.iso3 === d.id.replace('n_',''));
+    tt.innerHTML = `
+      <div style="font-family:var(--cond);font-size:15px;font-weight:700;color:#4da6ff;margin-bottom:2px;">${d.fullName || d.label}</div>
+      <div style="font-family:var(--mono);font-size:9px;color:var(--text3);letter-spacing:1px;margin-bottom:5px;">${d.id.replace('n_','')}</div>
+      ${n?.priority_nation ? '<div style="font-family:var(--mono);font-size:9px;color:var(--yellow);">&#9733; PRIORITY NATION</div>' : ''}
+      ${n ? `<div style="font-family:var(--mono);font-size:9px;color:var(--text3);margin-top:4px;">${n.defense_pct_gdp}% GDP &middot; ${n.two_pct_compliant?'&#10003; 2%':'&#10007; 2%'} &middot; ${(n.efp_role||'').toUpperCase()}</div>` : ''}
+      <div style="font-family:var(--mono);font-size:8px;color:var(--text3);margin-top:6px;opacity:0.6;">click to inspect &middot; drag to pin</div>`;
+  } else {
+    const color = AREA_COLORS[d.area_id] || '#fff';
+    const c = allCapabilities.find(x => x.cap_id === d.label);
+    tt.innerHTML = `
+      <div style="font-family:var(--cond);font-size:14px;font-weight:700;color:${color};margin-bottom:4px;">${d.label}</div>
+      <div style="font-size:11px;color:var(--text2);line-height:1.5;margin-bottom:4px;">${d.capName || c?.name || ''}</div>
+      <div style="font-family:var(--mono);font-size:9px;color:var(--text3);">AREA ${String(d.area_id||'').padStart(2,'0')} &middot; ${c?.platform_family||'&#8212;'}</div>
+      <div style="font-family:var(--mono);font-size:8px;color:var(--text3);margin-top:5px;opacity:0.6;">click to inspect</div>`;
+  }
+  positionTooltip(tt, e);
+}
+
+function positionTooltip(tt, e) {
+  const pad = 16, tw = 280, th = 130;
+  let x = e.clientX + pad;
+  let y = e.clientY + pad;
+  if (x + tw > window.innerWidth)  x = e.clientX - tw - pad;
+  if (y + th > window.innerHeight) y = e.clientY - th - pad;
+  if (x < 0) x = pad;
+  if (y < 0) y = pad;
+  tt.style.left = x + 'px';
+  tt.style.top  = y + 'px';
+}
+
+function moveGraphTooltip(e) {
+  const tt = document.getElementById('graph-tooltip');
+  if (tt.style.display === 'none') return;
+  positionTooltip(tt, e);
+}
+
+// ── MAP ───────────────────────────────────────────
+function initMap() {
+  if(leafletMap) return;
+  leafletMap=L.map('efdl-map',{zoomControl:true,scrollWheelZoom:true,attributionControl:false}).setView([54,20],4);
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{subdomains:'abcd',maxZoom:14}).addTo(leafletMap);
+  renderMapMarkers();
+  document.getElementById('map-nations').textContent=allNations.length;
+  document.getElementById('map-priority').textContent=allNations.filter(n=>n.priority_nation).length;
+  document.getElementById('map-compliant').textContent=allNations.filter(n=>n.two_pct_compliant).length;
+}
+
+let mapStatsCache = null;  // Bug 5 fix: cache map stats, only query once
+
+async function renderMapMarkers() {
+  // Only fetch stats from Neo4j if we don't have them cached
+  if (!mapStatsCache) {
+    const recs=await runQuery(`
+      MATCH (n:Nation)-[r:HAS_STATUS]->(c:Capability)
+      WHERE r.readiness_score IS NOT NULL
+      RETURN n.iso3 AS iso3, avg(r.readiness_score) AS avg_score,
+             count(CASE WHEN r.status='DEPLOYED' THEN 1 END) AS deployed,
+             count(CASE WHEN r.status='GAP' THEN 1 END) AS gaps,
+             count(CASE WHEN r.status='PLANNED' THEN 1 END) AS planned
+    `);
+    mapStatsCache = {};
+    recs.forEach(r=>{ mapStatsCache[r.get('iso3')]={avg_score:parseFloat(r.get('avg_score'))||0,deployed:toNum(r.get('deployed'))||0,gaps:toNum(r.get('gaps'))||0,planned:toNum(r.get('planned'))||0}; });
+  }
+  const stats = mapStatsCache;
+  Object.values(mapMarkers).forEach(m=>m.remove()); mapMarkers={};
+
+  allNations.forEach(n=>{
+    if(!n.lat||!n.lng) return;
+    const s=stats[n.iso3]||{avg_score:0,deployed:0,gaps:0,planned:0};
+    const pct=Math.round((s.avg_score/4)*100);
+    const color=pct>=70?'#00e676':pct>=40?'#ffc400':'#ff3d57';
+    const glow=pct>=70?'rgba(0,230,118,0.4)':pct>=40?'rgba(255,196,0,0.4)':'rgba(255,61,87,0.4)';
+    const lval=mapLayer==='readiness'?pct+'%':mapLayer==='gaps'?s.gaps+' gaps':mapLayer==='deployed'?s.deployed+' dep':n.two_pct_compliant?'✓ 2%':'✗ 2%';
+    const lcol=mapLayer==='compliance'?(n.two_pct_compliant?'#00e676':'#ff3d57'):color;
+    const ip=n.priority_nation;
+    const sz=ip?44:36;
+
+    const icon=L.divIcon({className:'',html:`<div style="position:relative;cursor:pointer;">
+      ${ip?`<div style="position:absolute;inset:-4px;border-radius:50%;border:1px solid ${lcol};opacity:0.35;animation:mapPulse 2.5s infinite;"></div>`:''}
+      <div style="width:${sz}px;height:${sz}px;border-radius:50%;background:radial-gradient(circle at 35% 35%,${lcol}33,${lcol}11);border:${ip?'2px':'1.5px'} solid ${lcol};box-shadow:0 0 ${ip?18:10}px ${glow},inset 0 0 8px ${lcol}22;display:flex;flex-direction:column;align-items:center;justify-content:center;font-family:'Share Tech Mono',monospace;">
+        <div style="font-size:${ip?9:8}px;font-weight:700;color:${lcol};letter-spacing:0.5px;line-height:1.2;">${n.iso3}</div>
+        <div style="font-size:8px;color:${lcol};opacity:0.9;line-height:1.1;">${lval}</div>
+      </div></div>`,iconSize:[sz,sz],iconAnchor:[sz/2,sz/2]});
+
+    const popup=L.popup({maxWidth:280}).setContent(`
+      <div style="font-family:'Barlow Condensed',sans-serif;">
+        <div style="font-size:16px;font-weight:700;color:${lcol};letter-spacing:1px;margin-bottom:4px;">${n.name}</div>
+        <div style="font-family:'Share Tech Mono',monospace;font-size:9px;color:#3d5a80;margin-bottom:10px;">${n.iso3} · NATO ${n.nato_joined} · ${(n.efp_role||'').toUpperCase()}</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:5px;font-family:'Share Tech Mono',monospace;font-size:10px;">
+          <div style="background:rgba(0,0,0,0.3);border-radius:3px;padding:5px 8px;"><div style="color:#3d5a80;font-size:8px;margin-bottom:1px;">READINESS</div><div style="color:${color};font-size:15px;font-weight:700;font-family:'Barlow Condensed',sans-serif;">${pct}%</div></div>
+          <div style="background:rgba(0,0,0,0.3);border-radius:3px;padding:5px 8px;"><div style="color:#3d5a80;font-size:8px;margin-bottom:1px;">GAPS</div><div style="color:#ff3d57;font-size:15px;font-weight:700;font-family:'Barlow Condensed',sans-serif;">${s.gaps}</div></div>
+          <div style="background:rgba(0,0,0,0.3);border-radius:3px;padding:5px 8px;"><div style="color:#3d5a80;font-size:8px;margin-bottom:1px;">DEPLOYED</div><div style="color:#00e676;font-size:15px;font-weight:700;font-family:'Barlow Condensed',sans-serif;">${s.deployed}</div></div>
+          <div style="background:rgba(0,0,0,0.3);border-radius:3px;padding:5px 8px;"><div style="color:#3d5a80;font-size:8px;margin-bottom:1px;">2% PLEDGE</div><div style="color:${n.two_pct_compliant?'#00e676':'#ff3d57'};font-size:12px;font-weight:700;font-family:'Barlow Condensed',sans-serif;">${n.two_pct_compliant?'✓ MET':'✗ NO'}</div></div>
+        </div>
+        <div style="margin-top:7px;font-family:'Share Tech Mono',monospace;font-size:9px;color:#3d5a80;">${n.defense_pct_gdp}% GDP · $${n.gdp_usd_bn}B · ${ip?'★ PRIORITY':'Standard'}</div>
+      </div>`);
+    const marker=L.marker([n.lat,n.lng],{icon}).addTo(leafletMap).bindPopup(popup);
+    mapMarkers[n.iso3]=marker;
+  });
+}
+// D: Compare → shortcut from Nation Report Card
+function compareFromNation() {
+  const iso = currentNation;
+  if (!iso) return;
+  document.getElementById('compare-nation-a').value = iso;
+  showTab('compare', document.getElementById('nav-compare'));
+}
+
+// C: Map layer toggle with immediate visual feedback
+function setMapLayer(layer, btn) {
+  mapLayer = layer;
+  // Immediately update active button state before async re-render
+  document.querySelectorAll('#tab-bgroups .filter-chip').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  renderMapMarkers();
+}
+
+// ── MAP CONNECTION LINES ──────────────────────────
+let mapConnectionLayers = {};
+let mapConnectionActive = {};
+
+const EFP_LINKS = [
+  {fw:'GBR', host:'EST', bg:'eFP Estonia'},
+  {fw:'DEU', host:'LTU', bg:'eFP Lithuania'},
+  {fw:'USA', host:'POL', bg:'eFP Poland'},
+  {fw:'FRA', host:'ROU', bg:'eFP Romania'},
+  {fw:'CAN', host:'LVA', bg:'eFP Latvia'},
+  {fw:'GBR', host:'HUN', bg:'eFP Hungary'},
+  {fw:'FRA', host:'SVK', bg:'eFP Slovakia'},
+];
+
+function toggleMapConnections(type, btn) {
+  if (!leafletMap) return;
+  if (mapConnectionActive[type]) {
+    if (mapConnectionLayers[type]) {
+      mapConnectionLayers[type].forEach(l => { try { leafletMap.removeLayer(l); } catch(e){} });
+      delete mapConnectionLayers[type];
+    }
+    mapConnectionActive[type] = false;
+    btn.classList.remove('active');
+  } else {
+    mapConnectionActive[type] = true;
+    btn.classList.add('active');
+    drawMapConnections(type);
+  }
+  updateMapConnLegend();
+}
+
+function clearAllMapConnections() {
+  if (!leafletMap) return;
+  Object.keys(mapConnectionLayers).forEach(type => {
+    (mapConnectionLayers[type]||[]).forEach(l => { try { leafletMap.removeLayer(l); } catch(e){} });
+  });
+  mapConnectionLayers = {};
+  mapConnectionActive = {};
+  ['conn-efp-btn','conn-gaps-btn','conn-gdp-btn'].forEach(id => {
+    const b = document.getElementById(id);
+    if (b) b.classList.remove('active');
+  });
+  updateMapConnLegend();
+}
+
+function updateMapConnLegend() {
+  const leg = document.getElementById('map-conn-legend');
+  if (!leg) return;
+  const active = Object.entries(mapConnectionActive).filter(([,v]) => v);
+  if (!active.length) { leg.style.display = 'none'; return; }
+  leg.style.cssText = 'display:flex;gap:20px;flex-wrap:wrap;margin-bottom:10px;padding:8px 12px;background:var(--bg3);border:1px solid var(--border);border-radius:4px;font-family:var(--mono);font-size:9px;color:var(--text3);';
+  const defs = {
+    efp:  {color:'#4da6ff', label:'eFP framework \u2192 host', dash:false},
+    gaps: {color:'#ff3d57', label:'Shared critical gaps (priority nations)', dash:true},
+    gdp:  {color:'#ffc400', label:'Non-compliant \u2192 nearest compliant', dash:true},
+  };
+  leg.innerHTML = active.map(([t]) => {
+    const d = defs[t] || {color:'#fff', label:t, dash:false};
+    const lineStyle = d.dash
+      ? `border-top:2px dashed ${d.color};height:0;width:24px;`
+      : `background:${d.color};height:2px;width:24px;`;
+    return `<span style="display:flex;align-items:center;gap:6px;"><span style="${lineStyle}display:inline-block;vertical-align:middle;border-radius:1px;"></span>${d.label}</span>`;
+  }).join('');
+}
+
+async function drawMapConnections(type) {
+  const layers = [];
+
+  if (type === 'efp') {
+    EFP_LINKS.forEach(link => {
+      const fw   = allNations.find(n => n.iso3 === link.fw);
+      const host = allNations.find(n => n.iso3 === link.host);
+      if (!fw || !host || !fw.lat || !host.lat) return;
+      const line = L.polyline([[fw.lat, fw.lng], [host.lat, host.lng]], {
+        color:'#4da6ff', weight:2.5, opacity:0.75, dashArray:null
+      }).addTo(leafletMap);
+      line.bindTooltip(`<b style="font-family:Barlow Condensed,sans-serif;color:#4da6ff;font-size:14px;">${link.bg}</b><br><span style="font-family:Share Tech Mono,monospace;font-size:10px;color:#7a94bb;">${fw.name} \u2192 ${host.name}</span>`, {sticky:true, className:'map-tooltip-dark'});
+      const midLat = (fw.lat + host.lat) / 2;
+      const midLng = (fw.lng + host.lng) / 2;
+      const dot = L.circleMarker([midLat, midLng], {
+        radius:5, color:'#0a1828', fillColor:'#4da6ff', fillOpacity:1, weight:2
+      }).addTo(leafletMap).bindTooltip(link.bg, {sticky:true});
+      layers.push(line, dot);
+    });
+  }
+
+  if (type === 'gaps') {
+    const recs = await runQuery(`
+      MATCH (n1:Nation)-[:HAS_STATUS {status:'GAP'}]->(c:Capability)<-[:HAS_STATUS {status:'GAP'}]-(n2:Nation)
+      WHERE n1.iso3 < n2.iso3 AND n1.priority_nation = true AND n2.priority_nation = true
+      RETURN n1.iso3 AS a, n2.iso3 AS b, count(c) AS shared_gaps
+      ORDER BY shared_gaps DESC LIMIT 18
+    `);
+    recs.forEach(rec => {
+      const nA = allNations.find(n => n.iso3 === rec.get('a'));
+      const nB = allNations.find(n => n.iso3 === rec.get('b'));
+      const cnt = Number(rec.get('shared_gaps'));
+      if (!nA || !nB || !nA.lat || !nB.lat) return;
+      const opacity = Math.min(0.85, 0.28 + cnt * 0.06);
+      const weight  = Math.min(5, 1.5 + Math.floor(cnt / 4));
+      const line = L.polyline([[nA.lat, nA.lng], [nB.lat, nB.lng]], {
+        color:'#ff3d57', weight, opacity, dashArray:'6,4'
+      }).addTo(leafletMap);
+      line.bindTooltip(
+        `<b style="font-family:Barlow Condensed,sans-serif;color:#ff3d57;font-size:14px;">${cnt} shared gaps</b><br><span style="font-family:Share Tech Mono,monospace;font-size:10px;color:#7a94bb;">${nA.name} \u2194 ${nB.name}</span>`,
+        {sticky:true}
+      );
+      layers.push(line);
+    });
+  }
+
+  if (type === 'gdp') {
+    const nonComp = allNations.filter(n => !n.two_pct_compliant && n.lat && n.lng);
+    const comp    = allNations.filter(n =>  n.two_pct_compliant && n.lat && n.lng);
+    nonComp.forEach(nc => {
+      let best = null, bestDist = Infinity;
+      comp.forEach(c => {
+        const d = Math.hypot(c.lat - nc.lat, c.lng - nc.lng);
+        if (d < bestDist) { bestDist = d; best = c; }
+      });
+      if (!best) return;
+      const line = L.polyline([[nc.lat, nc.lng], [best.lat, best.lng]], {
+        color:'#ffc400', weight:1.5, opacity:0.5, dashArray:'3,6'
+      }).addTo(leafletMap);
+      line.bindTooltip(
+        `<b style="font-family:Barlow Condensed,sans-serif;color:#ffc400;font-size:14px;">${nc.name}</b> \u2014 ${nc.defense_pct_gdp||'?'}% GDP<br><span style="font-family:Share Tech Mono,monospace;font-size:10px;color:#7a94bb;">Nearest compliant: ${best.name}</span>`,
+        {sticky:true}
+      );
+      layers.push(line);
+    });
+  }
+
+  mapConnectionLayers[type] = layers;
+}
+
+
+// ── BATTLEGROUPS ──────────────────────────────────
+async function renderBattlegroups() {
+  // Fetch gap data per battlegroup nation
+  const recs=await runQuery(`
+    MATCH (n:Nation)-[r:HAS_STATUS]->(c:Capability)
+    WHERE r.readiness_score IS NOT NULL
+    RETURN n.iso3 AS iso3, avg(r.readiness_score) AS avg, count(CASE WHEN r.status='GAP' THEN 1 END) AS gaps
+  `);
+  const nStats={};
+  recs.forEach(r=>{ nStats[r.get('iso3')]={avg:parseFloat(r.get('avg'))||0,gaps:toNum(r.get('gaps'))||0}; });
+
+  // Bug 2 fix: use global BG_HOSTS; also prefer host_iso3 from graph if available
+  const getHostIso = bg => bg.host_iso3 || BG_HOSTS[bg.bg_id] || '';
+
+  const grid=document.getElementById('bg-cards-grid');
+  if(!allBattlegroups.length) {
+    grid.innerHTML='<div style="font-family:var(--mono);font-size:11px;color:var(--text3);">Loading battlegroup data...</div>';
+    return;
+  }
+  grid.innerHTML=allBattlegroups.map(bg=>{
+    const hostIso=getHostIso(bg);
+    const hs=nStats[hostIso]||{avg:0,gaps:0};
+    const pct=Math.round((hs.avg/4)*100);
+    const color=pct>=70?'var(--green)':pct>=40?'var(--yellow)':'var(--red)';
+    const contributors=bg.contributors.filter(c=>c&&c!==bg.fw_iso3).slice(0,6);
+    return `<div class="bg-card" id="bgcard-${bg.bg_id}" onclick="selectBattlegroup('${bg.bg_id}')">
+      <div class="bg-card-name" style="color:${color};">${bg.bg_id}</div>
+      <div class="bg-card-meta">${bg.name||bg.bg_id} · Est. ${bg.established||'—'} · ~${bg.size_approx||'—'} troops</div>
+      <div style="display:flex;gap:6px;align-items:center;margin-bottom:8px;">
+        <div style="flex:1;height:4px;background:var(--bg);border-radius:2px;overflow:hidden;"><div style="width:${pct}%;height:100%;background:${color};border-radius:2px;"></div></div>
+        <span style="font-family:var(--mono);font-size:9px;color:${color};">${pct}%</span>
+      </div>
+      <div>
+        ${hostIso?`<span class="bg-nation-pill host">HOST: ${hostIso}</span>`:''}
+        ${bg.fw_iso3?`<span class="bg-nation-pill framework">FRMWK: ${bg.fw_iso3}</span>`:''}
+        ${contributors.map(c=>`<span class="bg-nation-pill">${c}</span>`).join('')}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+async function selectBattlegroup(bgId) {
+  document.querySelectorAll('.bg-card').forEach(c=>c.classList.remove('selected'));
+  document.getElementById('bgcard-'+bgId)?.classList.add('selected');
+
+  // Bug 2 fix: use global BG_HOSTS; prefer host_iso3 from loaded graph data
+  const bg=allBattlegroups.find(b=>b.bg_id===bgId);
+  const hostIso = bg?.host_iso3 || BG_HOSTS[bgId] || '';
+
+  const recs=await runQuery(`
+    MATCH (n:Nation)-[r:HAS_STATUS]->(c:Capability)-[:BELONGS_TO]->(a:CapabilityArea)
+    WHERE n.iso3=$iso3 AND r.status IN ['GAP','EVALUATED']
+    RETURN c.cap_id AS cap_id, c.name AS cap_name, a.name AS area, a.color_hex AS color, r.status AS status
+    ORDER BY r.status, a.area_id LIMIT 20
+  `, {iso3: hostIso});
+
+  const panel=document.getElementById('bg-detail-panel');
+  const content=document.getElementById('bg-detail-content');
+  panel.style.display='block';
+
+  const gaps=recs.map(r=>({cap_id:r.get('cap_id'),cap_name:r.get('cap_name'),area:r.get('area'),color:r.get('color'),status:r.get('status')}));
+
+  content.innerHTML=`
+    <div style="margin-bottom:14px;display:flex;align-items:center;gap:16px;flex-wrap:wrap;">
+      <div><div style="font-family:var(--cond);font-size:18px;font-weight:700;color:var(--accent);">${bg?.name||bgId}</div>
+      <div style="font-family:var(--mono);font-size:9px;color:var(--text3);">Host: ${hostIso||'—'} · Framework: ${bg?.fw_iso3||'—'} · Contributors: ${bg?.contributors?.filter(c=>c&&c!==bg.fw_iso3).join(', ')||'—'}</div></div>
+    </div>
+    ${gaps.length?`
+      <div style="font-family:var(--cond);font-size:11px;letter-spacing:1.5px;color:var(--red);margin-bottom:10px;">HOST NATION CAPABILITY GAPS (${hostIso})</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:8px;">
+        ${gaps.map(g=>`<div style="padding:8px 12px;background:${g.status==='GAP'?'rgba(255,61,87,0.07)':'rgba(255,112,67,0.06)'};border:1px solid ${g.status==='GAP'?'rgba(255,61,87,0.25)':'rgba(255,112,67,0.2)'};border-left:3px solid ${g.status==='GAP'?'var(--red)':'var(--orange)'};border-radius:0 3px 3px 0;">
+          <div style="font-family:var(--mono);font-size:9px;color:${g.color};">${g.area}</div>
+          <div style="font-size:12px;color:var(--text2);">${g.cap_id} — ${g.cap_name}</div>
+        </div>`).join('')}
+      </div>`:'<div style="color:var(--green);font-size:13px;">✓ No critical gaps for host nation.</div>'}
+  `;
+
+  // Pan map to host nation
+  if(hostIso && leafletMap) {
+    const n=allNations.find(x=>x.iso3===hostIso);
+    if(n?.lat) { leafletMap.setView([n.lat,n.lng],6,{animate:true}); mapMarkers[hostIso]?.openPopup(); }
+  }
+}
+
+// ── SIMULATIONS ───────────────────────────────────
+async function runCascade() {
+  const capId=document.getElementById('cascade-cap-select').value;
+  const nation=document.getElementById('cascade-nation-select').value;
+  const result=document.getElementById('cascade-result');
+  if(!capId) return;
+  result.innerHTML='<div style="font-family:var(--mono);font-size:11px;color:var(--text3);">Running...</div>';
+
+  const capInfo=allCapabilities.find(c=>c.cap_id===capId);
+  const depsRecs=await runQuery(`MATCH (c:Capability {cap_id:$id})<-[:DEPENDS_ON*1..3]-(dep:Capability) RETURN DISTINCT dep.cap_id AS dep_id, dep.name AS dep_name, dep.platform_family AS platform`,{id:capId});
+  const enablesRecs=await runQuery(`MATCH (c:Capability {cap_id:$id})-[:ENABLES]->(e:Capability) RETURN e.cap_id AS eid, e.name AS ename`,{id:capId});
+  // Bug 7 fix: build two separate queries rather than injecting empty string param
+  let affRecs;
+  if (nation === 'ALL') {
+    affRecs=await runQuery(`MATCH (n:Nation)-[r:HAS_STATUS]->(c:Capability {cap_id:$id}) WHERE r.status IN ['DEPLOYED','PLANNED','PARTIAL'] RETURN n.name AS name, n.iso3 AS iso3, r.status AS status, n.priority_nation AS priority ORDER BY n.priority_nation DESC`,{id:capId});
+  } else {
+    affRecs=await runQuery(`MATCH (n:Nation {iso3:$iso3})-[r:HAS_STATUS]->(c:Capability {cap_id:$id}) WHERE r.status IN ['DEPLOYED','PLANNED','PARTIAL'] RETURN n.name AS name, n.iso3 AS iso3, r.status AS status, n.priority_nation AS priority ORDER BY n.priority_nation DESC`,{id:capId, iso3:nation});
+  }
+
+  const deps=depsRecs.map(r=>({id:r.get('dep_id'),name:r.get('dep_name'),platform:r.get('platform')}));
+  const enables=enablesRecs.map(r=>({id:r.get('eid'),name:r.get('ename')}));
+  const affected=affRecs.map(r=>({name:r.get('name'),iso3:r.get('iso3'),status:r.get('status'),priority:r.get('priority')}));
+  const priAff=affected.filter(n=>n.priority);
+  const impact=Math.min(100,deps.length*15+enables.length*10+priAff.length*12);
+  const ic=impact>60?'var(--red)':impact>30?'var(--yellow)':'var(--green)';
+
+  result.innerHTML=`
+    <div style="margin-bottom:14px;padding:14px;background:rgba(255,61,87,0.06);border:1px solid rgba(255,61,87,0.2);border-radius:4px;">
+      <div style="font-family:var(--cond);font-size:10px;letter-spacing:2px;color:var(--text3);margin-bottom:8px;">SCENARIO: LOSS OF ${capId} — ${capInfo?.name||''}</div>
+      <div style="display:flex;align-items:center;gap:20px;">
+        <div style="text-align:center;"><div style="font-family:var(--cond);font-size:40px;font-weight:700;color:${ic};">${impact}</div><div style="font-family:var(--mono);font-size:9px;color:var(--text3);">IMPACT SCORE</div></div>
+        <div style="flex:1;display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;">
+          <div class="info-item"><span class="info-label">Dependent Caps</span><span class="info-value" style="color:var(--red);">${deps.length}</span></div>
+          <div class="info-item"><span class="info-label">Enables</span><span class="info-value" style="color:var(--orange);">${enables.length}</span></div>
+          <div class="info-item"><span class="info-label">Priority Affected</span><span class="info-value" style="color:var(--yellow);">${priAff.length}</span></div>
+        </div>
+      </div>
+    </div>
+    ${deps.length?`<div style="margin-bottom:10px;"><div style="font-family:var(--cond);font-size:10px;letter-spacing:1.5px;color:var(--red);margin-bottom:6px;">▼ DEGRADED CAPABILITIES</div>${deps.map(d=>`<div class="cascade-item critical"><span style="font-size:14px;">🔗</span><span><strong>${d.id}</strong> — ${d.name}</span></div>`).join('')}</div>`:''}
+    ${enables.length?`<div style="margin-bottom:10px;"><div style="font-family:var(--cond);font-size:10px;letter-spacing:1.5px;color:var(--orange);margin-bottom:6px;">⚡ MULTIPLIER EFFECTS LOST</div>${enables.map(e=>`<div class="cascade-item warn"><span style="font-size:14px;">⚡</span><span><strong>${e.id}</strong> — ${e.name}</span></div>`).join('')}</div>`:''}
+    ${affected.length?`<div><div style="font-family:var(--cond);font-size:10px;letter-spacing:1.5px;color:var(--accent);margin-bottom:6px;">⊕ AFFECTED NATIONS</div>${affected.map(n=>`<div class="cascade-item info"><span>${n.priority?'★':'·'}</span><span style="color:${n.priority?'var(--yellow)':'var(--text2)'};">${n.name}</span><span class="sbadge sbadge-${n.status.toLowerCase()}" style="margin-left:auto;">${n.status}</span></div>`).join('')}</div>`:''}
+  `;
+}
+
+async function runCoalition() {
+  const platform=document.getElementById('coalition-platform-select').value;
+  const minStatus=document.getElementById('coalition-status-select').value;
+  const result=document.getElementById('coalition-result');
+  result.innerHTML='<div style="font-family:var(--mono);font-size:11px;color:var(--text3);">Searching...</div>';
+  const statuses=minStatus==='DEPLOYED'?['DEPLOYED']:['DEPLOYED','PLANNED'];
+  const hRecs=await runQuery(`MATCH (n:Nation)-[r:HAS_STATUS]->(c:Capability) WHERE c.platform_family=$platform AND r.status IN $statuses RETURN n.name AS name, n.iso3 AS iso3, n.priority_nation AS priority, collect(DISTINCT {cap_id:c.cap_id,status:r.status}) AS caps, count(DISTINCT c) AS cnt ORDER BY n.priority_nation DESC, cnt DESC`,{platform,statuses});
+  const gRecs=await runQuery(`MATCH (n:Nation)-[r:HAS_STATUS]->(c:Capability) WHERE c.platform_family=$platform AND r.status IN ['GAP','EVALUATED','PARTIAL'] RETURN n.name AS name, n.iso3 AS iso3, count(DISTINCT c) AS gap_count ORDER BY gap_count DESC`,{platform});
+  const haves=hRecs.map(r=>({name:r.get('name'),iso3:r.get('iso3'),priority:r.get('priority'),caps:r.get('caps'),count:toNum(r.get('cnt'))}));
+  const needs=gRecs.map(r=>({name:r.get('name'),iso3:r.get('iso3'),gap_count:toNum(r.get('gap_count'))}));
+  if(!haves.length){result.innerHTML=`<div style="font-family:var(--mono);font-size:11px;color:var(--text3);">No nations found at requested status.</div>`;return;}
+  result.innerHTML=`
+    <div style="margin-bottom:12px;padding:10px 14px;background:rgba(0,200,255,0.05);border:1px solid rgba(0,200,255,0.2);border-radius:4px;">
+      <div style="font-family:var(--cond);font-size:10px;letter-spacing:2px;color:var(--text3);margin-bottom:4px;">PLATFORM: ${platform}</div>
+      <div style="display:flex;gap:16px;"><span style="font-family:var(--mono);font-size:11px;color:var(--green);">${haves.length} nations with capability</span><span style="font-family:var(--mono);font-size:11px;color:var(--red);">${needs.length} nations with gaps</span></div>
+    </div>
+    <div style="margin-bottom:12px;"><div style="font-family:var(--cond);font-size:10px;letter-spacing:1.5px;color:var(--green);margin-bottom:6px;">✓ CAN SHARE / MENTOR</div>
+    ${haves.map(n=>`<div class="coalition-item"><div><span style="font-family:var(--cond);font-size:13px;color:${n.priority?'var(--yellow)':'var(--text)'};">${n.priority?'★ ':''}${n.name}</span><span style="font-family:var(--mono);font-size:9px;color:var(--text3);margin-left:8px;">${n.iso3}</span></div><div style="display:flex;gap:4px;">${n.caps.slice(0,3).map(c=>`<span class="sbadge sbadge-${c.status.toLowerCase()}">${c.cap_id}</span>`).join('')}</div></div>`).join('')}</div>
+    ${needs.length?`<div><div style="font-family:var(--cond);font-size:10px;letter-spacing:1.5px;color:var(--red);margin-bottom:6px;">✗ NEED ASSISTANCE</div>${needs.map(n=>`<div class="coalition-item"><span style="font-family:var(--cond);font-size:13px;color:var(--text2);">${n.name} <span style="font-family:var(--mono);font-size:9px;color:var(--text3);">${n.iso3}</span></span><span style="font-family:var(--mono);font-size:11px;color:var(--red);">${n.gap_count} gap${n.gap_count!==1?'s':''}</span></div>`).join('')}</div>`:''}
+  `;
+}
+
+async function loadAllianceScorecard() {
+  const recs=await runQuery(`MATCH (n:Nation)-[r:HAS_STATUS]->(c:Capability)-[:BELONGS_TO]->(a:CapabilityArea) WHERE r.readiness_score IS NOT NULL RETURN a.area_id AS aid, a.name AS aname, a.color_hex AS color, avg(r.readiness_score) AS avg, count(CASE WHEN r.status='DEPLOYED' THEN 1 END) AS dep, count(CASE WHEN r.status='PLANNED' THEN 1 END) AS plan, count(CASE WHEN r.status='GAP' THEN 1 END) AS gaps ORDER BY a.area_id`);
+  const el=document.getElementById('alliance-scorecard');
+  if(!recs.length){el.innerHTML='<div style="color:var(--text3);font-family:var(--mono);">No data.</div>';return;}
+  let html=`<div style="overflow-x:auto;"><table><thead><tr><th>Area</th><th>Name</th><th>Avg Score</th><th>Alliance Readiness</th><th>Deployed</th><th>Planned</th><th>Gaps</th></tr></thead><tbody>`;
+  recs.forEach(r=>{
+    const aid=toNum(r.get('aid')),color=r.get('color'),avg=parseFloat(r.get('avg'))||0;
+    const dep=toNum(r.get('dep')),plan=toNum(r.get('plan')),gaps=toNum(r.get('gaps'));
+    const pct=Math.round((avg/4)*100),bc=pct>=70?'var(--green)':pct>=40?'var(--yellow)':'var(--red)';
+    html+=`<tr><td style="font-family:var(--mono);font-size:10px;color:${color};">A${String(aid).padStart(2,'0')}</td><td style="color:${color};font-weight:500;">${r.get('aname')}</td><td style="font-family:var(--mono);font-size:11px;">${avg.toFixed(2)}/4.00</td><td><div style="display:flex;align-items:center;gap:8px;"><div style="width:100px;height:6px;background:var(--bg3);border-radius:3px;overflow:hidden;"><div style="width:${pct}%;height:100%;background:${bc};border-radius:3px;"></div></div><span style="font-family:var(--mono);font-size:11px;color:${bc};">${pct}%</span></div></td><td style="font-family:var(--mono);font-size:11px;color:var(--green);">${dep}</td><td style="font-family:var(--mono);font-size:11px;color:var(--accent);">${plan}</td><td style="font-family:var(--mono);font-size:11px;color:var(--red);">${gaps}</td></tr>`;
+  });
+  html+='</tbody></table></div>';
+  el.innerHTML=html;
+}
+
+// ── ANALYST NOTES (Bug 6 fix: Neo4j persisted) ────
+async function saveNote() {
+  const nation=document.getElementById('note-nation-select').value;
+  const type=document.getElementById('note-type').value;
+  const text=document.getElementById('note-text').value.trim();
+  const status=document.getElementById('note-status');
+  if(!text){status.textContent='Note text is required.';status.style.color='var(--red)';return;}
+  status.textContent='Saving...';status.style.color='var(--text3)';
+  try {
+    const noteId = 'note_' + Date.now();
+    const timestamp = new Date().toISOString();
+    // Always create the note node
+    await runQuery(
+      'CREATE (note:AnalystNote {note_id:$note_id, nation_iso3:$nation, type:$type, text:$text, timestamp:$timestamp})',
+      { note_id: noteId, nation: nation || '', type, text, timestamp }
+    );
+    // If a nation was selected, link it
+    if (nation) {
+      await runQuery(
+        'MATCH (note:AnalystNote {note_id:$note_id}) MATCH (n:Nation {iso3:$nation}) MERGE (note)-[:ABOUT_NATION]->(n)',
+        { note_id: noteId, nation }
+      );
+    }
+    document.getElementById('note-text').value='';
+    status.textContent='✓ Saved to Neo4j.';status.style.color='var(--green)';
+    setTimeout(()=>{status.textContent='';},2500);
+    await loadNotes();
+  } catch(e) {
+    status.textContent='Error: '+e.message;status.style.color='var(--red)';
+  }
+}
+
+async function loadNotes() {
+  try {
+    const recs = await runQuery(`
+      MATCH (note:AnalystNote)
+      RETURN note ORDER BY note.timestamp DESC LIMIT 50
+    `);
+    analystNotes = recs.map(r => {
+      const p = r.get('note').properties;
+      return {id: p.note_id, nation: p.nation_iso3, type: p.type, text: p.text, timestamp: p.timestamp};
+    });
+    renderNotes();
+  } catch(e) {
+    console.warn('Could not load notes:', e);
+  }
+}
+
+function renderNotes() {
+  const el=document.getElementById('notes-list');
+  if(!analystNotes.length){el.innerHTML='<div style="font-family:var(--mono);font-size:11px;color:var(--text3);">No notes yet.</div>';return;}
+  el.innerHTML=analystNotes.map(n=>{
+    const nName=n.nation?allNations.find(x=>x.iso3===n.nation)?.name||n.nation:'General';
+    const ts = n.timestamp ? new Date(n.timestamp).toLocaleString() : '—';
+    return `<div class="note-item ${n.type}">
+      <div class="note-meta">${n.type.toUpperCase()} · ${nName} · ${ts}</div>
+      <div class="note-body">${n.text}</div>
+    </div>`;
+  }).join('');
+}
+
+
+// ── NATION COMPARISON ─────────────────────────────
+let compareDiffFilter = 'all';
+let compareDataA = [], compareDataB = [];
+
+function populateCompareSelects() {
+  const selA = document.getElementById('compare-nation-a');
+  const selB = document.getElementById('compare-nation-b');
+  if (!selA || !selB) return;
+  const opts = allNations.map(n=>`<option value="${n.iso3}">${n.name} (${n.iso3})${n.priority_nation?' ★':''}</option>`).join('');
+  selA.innerHTML = opts;
+  selB.innerHTML = opts;
+  // Default to a compelling eFP pair
+  selA.value = 'GBR'; selB.value = 'EST';
+}
+
+function applyQuickPair(sel) {
+  const [a, b] = (sel.value||'').split('|');
+  if (!a || !b) return;
+  document.getElementById('compare-nation-a').value = a;
+  document.getElementById('compare-nation-b').value = b;
+  sel.value = '';
+  runComparison();
+}
+
+function toggleDiffFilter(btn) {
+  document.querySelectorAll('[data-diff]').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  compareDiffFilter = btn.dataset.diff;
+  renderDiffTable(compareDataA, compareDataB);
+}
+
+async function runComparison() {
+  const isoA = document.getElementById('compare-nation-a')?.value;
+  const isoB = document.getElementById('compare-nation-b')?.value;
+  if (!isoA || !isoB) return;
+
+  // Fetch both nations in parallel
+  const [recsA, recsB] = await Promise.all([
+    runQuery(`
+      MATCH (n:Nation {iso3:$iso3})-[r:HAS_STATUS]->(c:Capability)-[:BELONGS_TO]->(a:CapabilityArea)
+      RETURN c.cap_id AS cap_id, c.name AS cap_name, c.platform_family AS platform,
+             a.area_id AS area_id, a.name AS area_name, a.color_hex AS color,
+             r.status AS status, r.readiness_score AS score, r.deployment_pct AS pct
+      ORDER BY a.area_id, c.cap_id
+    `, {iso3: isoA}),
+    runQuery(`
+      MATCH (n:Nation {iso3:$iso3})-[r:HAS_STATUS]->(c:Capability)-[:BELONGS_TO]->(a:CapabilityArea)
+      RETURN c.cap_id AS cap_id, c.name AS cap_name, c.platform_family AS platform,
+             a.area_id AS area_id, a.name AS area_name, a.color_hex AS color,
+             r.status AS status, r.readiness_score AS score, r.deployment_pct AS pct
+      ORDER BY a.area_id, c.cap_id
+    `, {iso3: isoB})
+  ]);
+
+  const parse = recs => recs.map(rec => ({
+    cap_id: rec.get('cap_id'),
+    cap_name: rec.get('cap_name'),
+    platform: rec.get('platform'),
+    area_id: toNum(rec.get('area_id')),
+    area_name: rec.get('area_name'),
+    color: rec.get('color'),
+    status: rec.get('status') || 'UNKNOWN',
+    score: toNum(rec.get('score')),
+    pct: parseFloat(rec.get('pct')) || 0,
+  }));
+
+  compareDataA = parse(recsA);
+  compareDataB = parse(recsB);
+
+  const nationA = allNations.find(n=>n.iso3===isoA);
+  const nationB = allNations.find(n=>n.iso3===isoB);
+
+  renderCompareKPI(nationA, nationB, compareDataA, compareDataB);
+  renderCompareAreaBars(isoA, isoB, compareDataA, compareDataB);
+  renderDiffTable(compareDataA, compareDataB);
+}
+
+function renderCompareKPI(nA, nB, dA, dB) {
+  const scoreOf = d => {
+    const s = d.filter(c=>c.score!==null);
+    return s.length ? Math.round(s.reduce((a,c)=>a+(c.score||0),0)/s.length/4*100) : 0;
+  };
+  const countOf = (d, st) => d.filter(c=>c.status===st).length;
+  const sA = scoreOf(dA), sB = scoreOf(dB);
+  const colA = sA>=70?'var(--green)':sA>=40?'var(--yellow)':'var(--red)';
+  const colB = sB>=70?'var(--green)':sB>=40?'var(--yellow)':'var(--red)';
+
+  const kpiBox = (label, vA, vB, colorFn) => {
+    const ca = colorFn ? colorFn(vA) : 'var(--text)';
+    const cb = colorFn ? colorFn(vB) : 'var(--text)';
+    return `<div style="display:grid;grid-template-columns:1fr auto 1fr;align-items:center;text-align:center;padding:10px 0;border-bottom:1px solid rgba(27,48,80,0.4);">
+      <div style="font-family:var(--cond);font-size:22px;font-weight:700;color:${ca};">${vA}</div>
+      <div style="font-family:var(--mono);font-size:9px;color:var(--text3);padding:0 12px;">${label}</div>
+      <div style="font-family:var(--cond);font-size:22px;font-weight:700;color:${cb};">${vB}</div>
+    </div>`;
+  };
+
+  const gapColor = v => v > 10 ? 'var(--red)' : v > 5 ? 'var(--yellow)' : 'var(--green)';
+  const depColor = v => v > 30 ? 'var(--green)' : v > 15 ? 'var(--yellow)' : 'var(--red)';
+
+  document.getElementById('compare-kpi').innerHTML = `
+    <div class="card" style="margin-bottom:0;border-color:var(--accent);">
+      <div style="font-family:var(--cond);font-size:18px;font-weight:700;color:var(--accent);text-align:center;margin-bottom:10px;">${nA?.name||'—'} ${nA?.priority_nation?'★':''}</div>
+      <div style="font-family:var(--cond);font-size:52px;font-weight:700;color:${colA};text-align:center;line-height:1;text-shadow:0 0 30px ${colA};">${sA}%</div>
+      <div style="font-family:var(--mono);font-size:9px;color:var(--text3);text-align:center;letter-spacing:2px;margin-top:4px;">${sA>=70?'READY':sA>=40?'PARTIAL':'CRITICAL GAPS'}</div>
+      <div style="font-family:var(--mono);font-size:10px;color:var(--text3);text-align:center;margin-top:8px;">${nA?.efp_role?.toUpperCase()||'—'} · ${nA?.defense_pct_gdp||'—'}% GDP · ${nA?.two_pct_compliant?'✓ 2%':'✗ 2%'}</div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:0;background:var(--panel);border:1px solid var(--border);border-radius:4px;padding:14px;min-width:200px;">
+      ${kpiBox('READINESS', sA+'%', sB+'%', null)}
+      ${kpiBox('DEPLOYED',  countOf(dA,'DEPLOYED'), countOf(dB,'DEPLOYED'), depColor)}
+      ${kpiBox('PLANNED',   countOf(dA,'PLANNED'),  countOf(dB,'PLANNED'),  null)}
+      ${kpiBox('GAPS',      countOf(dA,'GAP'),       countOf(dB,'GAP'),      gapColor)}
+      ${kpiBox('PARTIAL',   countOf(dA,'PARTIAL'),   countOf(dB,'PARTIAL'),  null)}
+    </div>
+    <div class="card" style="margin-bottom:0;border-color:var(--purple);">
+      <div style="font-family:var(--cond);font-size:18px;font-weight:700;color:var(--purple);text-align:center;margin-bottom:10px;">${nB?.name||'—'} ${nB?.priority_nation?'★':''}</div>
+      <div style="font-family:var(--cond);font-size:52px;font-weight:700;color:${colB};text-align:center;line-height:1;text-shadow:0 0 30px ${colB};">${sB}%</div>
+      <div style="font-family:var(--mono);font-size:9px;color:var(--text3);text-align:center;letter-spacing:2px;margin-top:4px;">${sB>=70?'READY':sB>=40?'PARTIAL':'CRITICAL GAPS'}</div>
+      <div style="font-family:var(--mono);font-size:10px;color:var(--text3);text-align:center;margin-top:8px;">${nB?.efp_role?.toUpperCase()||'—'} · ${nB?.defense_pct_gdp||'—'}% GDP · ${nB?.two_pct_compliant?'✓ 2%':'✗ 2%'}</div>
+    </div>
+  `;
+}
+
+function renderCompareAreaBars(isoA, isoB, dA, dB) {
+  const areaIds = [...new Set(dA.map(c=>c.area_id))].sort((a,b)=>a-b);
+  const avgArea = (d, aid) => {
+    const caps = d.filter(c=>c.area_id===aid && c.score!==null);
+    return caps.length ? caps.reduce((s,c)=>s+(c.score||0),0)/caps.length/4*100 : 0;
+  };
+
+  document.getElementById('compare-area-bars').innerHTML = areaIds.map(aid => {
+    const area = dA.find(c=>c.area_id===aid);
+    const pA = Math.round(avgArea(dA, aid));
+    const pB = Math.round(avgArea(dB, aid));
+    const diff = pA - pB;
+    const diffCol = diff > 10 ? 'var(--accent)' : diff < -10 ? 'var(--purple)' : 'var(--text3)';
+    const diffLabel = diff > 0 ? `+${diff}% A` : diff < 0 ? `${diff}% B` : 'EQUAL';
+    return `<div style="display:grid;grid-template-columns:120px 1fr auto 1fr auto;gap:8px;align-items:center;padding:7px 0;border-bottom:1px solid rgba(27,48,80,0.3);">
+      <div style="font-size:11px;color:${area?.color||'#fff'};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${area?.area_name||'Area '+aid}</div>
+      <div style="display:flex;align-items:center;gap:6px;justify-content:flex-end;">
+        <span style="font-family:var(--mono);font-size:10px;color:var(--accent);">${pA}%</span>
+        <div style="width:90px;height:6px;background:var(--bg3);border-radius:3px;overflow:hidden;"><div style="width:${pA}%;height:100%;background:var(--accent);border-radius:3px;"></div></div>
+      </div>
+      <div style="font-family:var(--mono);font-size:9px;color:${diffCol};text-align:center;padding:0 10px;min-width:70px;">${diffLabel}</div>
+      <div style="display:flex;align-items:center;gap:6px;">
+        <div style="width:90px;height:6px;background:var(--bg3);border-radius:3px;overflow:hidden;"><div style="width:${pB}%;height:100%;background:var(--purple);border-radius:3px;"></div></div>
+        <span style="font-family:var(--mono);font-size:10px;color:var(--purple);">${pB}%</span>
+      </div>
+      <div></div>
+    </div>`;
+  }).join('');
+}
+
+function renderDiffTable(dA, dB) {
+  const mapB = Object.fromEntries(dB.map(c=>[c.cap_id, c]));
+  const STATUS_ORDER = {DEPLOYED:4,PLANNED:3,PARTIAL:2,EVALUATED:1,GAP:0,UNKNOWN:null,NOT_APPLICABLE:null};
+
+  let rows = dA.map(cA => {
+    const cB = mapB[cA.cap_id] || {status:'UNKNOWN', score:null};
+    const sA = STATUS_ORDER[cA.status] ?? -1;
+    const sB = STATUS_ORDER[cB.status] ?? -1;
+    const diff = (sA !== null && sB !== null) ? sA - sB : null;
+    return {...cA, statusB: cB.status, scoreB: cB.score, diff};
+  });
+
+  // Apply diff filter
+  if (compareDiffFilter === 'adiff')    rows = rows.filter(r => r.diff !== null && r.diff > 0);
+  if (compareDiffFilter === 'bdiff')    rows = rows.filter(r => r.diff !== null && r.diff < 0);
+  if (compareDiffFilter === 'both_gap') rows = rows.filter(r => r.status === 'GAP' && r.statusB === 'GAP');
+  if (compareDiffFilter === 'both_dep') rows = rows.filter(r => r.status === 'DEPLOYED' && r.statusB === 'DEPLOYED');
+
+  const diffIcon = diff => {
+    if (diff === null) return '<span style="color:var(--text3);">—</span>';
+    if (diff > 0) return `<span style="color:var(--accent);font-size:13px;">▲</span>`;
+    if (diff < 0) return `<span style="color:var(--purple);font-size:13px;">▼</span>`;
+    return `<span style="color:var(--green);font-size:11px;">═</span>`;
+  };
+
+  const isoA = document.getElementById('compare-nation-a')?.value || 'A';
+  const isoB = document.getElementById('compare-nation-b')?.value || 'B';
+
+  let html = `<table><thead><tr>
+    <th>ID</th><th>Capability</th><th>Platform</th>
+    <th style="color:var(--accent);">${isoA}</th>
+    <th style="text-align:center;">DIFF</th>
+    <th style="color:var(--purple);">${isoB}</th>
+  </tr></thead><tbody>`;
+
+  let lastArea = null;
+  rows.forEach(r => {
+    if (r.area_id !== lastArea) {
+      const area = dA.find(c=>c.area_id===r.area_id);
+      html += `<tr><td colspan="6" style="padding:8px 12px;background:${area?.color||'#00c8ff'}14;border-left:3px solid ${area?.color||'#00c8ff'};font-family:var(--cond);font-size:11px;letter-spacing:1.5px;color:${area?.color||'#00c8ff'};">AREA ${String(r.area_id).padStart(2,'0')} — ${r.area_name?.toUpperCase()}</td></tr>`;
+      lastArea = r.area_id;
+    }
+    html += `<tr>
+      <td style="font-family:var(--mono);font-size:10px;color:var(--text3);">${r.cap_id}</td>
+      <td style="font-size:12px;">${r.cap_name}</td>
+      <td style="font-family:var(--mono);font-size:10px;color:var(--text3);">${r.platform||'—'}</td>
+      <td><span class="sbadge sbadge-${(r.status||'unknown').toLowerCase()}">${r.status||'—'}</span></td>
+      <td style="text-align:center;">${diffIcon(r.diff)}</td>
+      <td><span class="sbadge sbadge-${(r.statusB||'unknown').toLowerCase()}">${r.statusB||'—'}</span></td>
+    </tr>`;
+  });
+
+  if (!rows.length) html += `<tr><td colspan="6" style="text-align:center;color:var(--text3);font-family:var(--mono);font-size:11px;padding:20px;">No capabilities match this filter.</td></tr>`;
+  html += '</tbody></table>';
+  document.getElementById('compare-diff-table').innerHTML = html;
+}
+
+
+// ── INIT ──────────────────────────────────────────
+document.getElementById('credPass').addEventListener('keypress',e=>{if(e.key==='Enter')connectNeo4j();});
+</script>
+</body>
+</html>
